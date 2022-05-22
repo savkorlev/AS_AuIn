@@ -1,214 +1,87 @@
-import argparse
-import datetime
-import sys
-import copy
-import time
 import pandas as pd
-from instances.Construction import ouralgorithm
-from instances.Intialization import random_sweep
-from instances.Trucks import create_vehicles
-from instances.Utils import vehicle_assignment, solution_cost, Instance_tune
-from instances.Plot import plotVRP, inner_city_check
+import cplex
+import random
+from instances.Tools import create_graph, print_solution
 
-# 0. ENTER THE CITY.
-# Names to enter: NewYork, Paris, Shanghai
-city = "Shanghai"
-# set the # of vehicles available to Sweep and Algorithm
-numI_Atego = 0
-numI_VWTrans = 17
-numI_VWCaddy = 0
-numI_DeFuso = 0
-numI_ScooterL = 0
-numI_ScooterS = 0
-numI_eCargoBike = 0
+df_nodes = pd.read_csv("data/nodes.txt", sep=' ')
+df_nodes = df_nodes.drop(columns=['Demand[m^3*10^-3]', 'Duration'])
 
-# set fixed costs on/off
-fixed_cost_active = False  # sets fixed costs active for all vehicles
-tax_ins_active = False  # sets taxes and insurance active. Makes fixed costs for all non-leased vehicles ~90% higher (20% for bike)
+for row, content in df_nodes.iterrows():
+    if row == 0:
+        df_nodes.iloc[row, 1] = int(random.uniform(0, 500))
+        df_nodes.iloc[row, 2] = int(random.uniform(0, 500))
+    else:
+        df_nodes.iloc[row, 1] = int(random.uniform(0, 500))
+        df_nodes.iloc[row, 2] = int(random.uniform(0, 500))
+        df_nodes.iloc[row, 3] = int(random.uniform(300, 600))
 
-# set demand_factor
-kg_factor = 1
-# set volume_factor
-vol_factor = 1
-# set city cost lvl: 'none', 'low', 'medium', 'high', 'ban'
-city_cost_level = 'medium'
+# df_nodes.to_csv('data/nodes_permutated.txt', index=False)
 
-# set the run parameters
-perform_dict = {}
-params_dict = {
-    'max_iterations': [5000],
-    'init_temp': [0.1],
-    'temp_target_percentage': [0.025],
-    'temp_target_iteration': [1.2],
-    'freeze_period_length': [0.02],
-    'destroy_random_ub': [0.12],
-    'destroy_expensive_ub': [0.1],
-    'destroy_route_ub': [0.5],
-    'destroy_related_ub': [0.12],
-    'max_weight': [5000],  # Botch: if this is set to 5001, we activate Vehicle_Assignment after Destruction
-    'min_weight': [10],
-    'reduce_step': [4],
-    'step_penalty': [1],
-}
+# LOCATIONS (coordinates of nodes)
+locations = df_nodes.drop(columns=['Demand[kg]', 'Id']).values.tolist()
 
-# 1. LOADING THE DATA
-if city == "NewYork":
-    df_nodes = pd.read_csv("data/NewYork.nodes", sep=' ')
-    df_nodes["Duration"] = pd.to_timedelta(df_nodes["Duration"]).dt.total_seconds() / 60  # converting duration column to floats instead of strings
-    df_routes = pd.read_csv("data/NewYork.routes", sep=' ')
-    df_routes["Duration[s]"] = pd.to_timedelta(df_routes["Duration[s]"]).dt.total_seconds() / 60  # converting duration column to floats instead of strings
-if city == "Paris":
-    df_nodes = pd.read_csv("data/Paris.nodes", sep=' ')
-    df_nodes["Duration"] = pd.to_timedelta(df_nodes["Duration"]).dt.total_seconds() / 60  # converting duration column to floats instead of strings
-    df_routes = pd.read_csv("data/Paris.routes", sep=' ')
-    df_routes["Duration[s]"] = pd.to_timedelta(df_routes["Duration[s]"]).dt.total_seconds() / 60  # converting duration column to floats instead of strings
-if city == "Shanghai":
-    df_nodes = pd.read_csv("data/Shanghai.nodes", sep=' ')
-    df_nodes["Duration"] = pd.to_timedelta(df_nodes["Duration"]).dt.total_seconds() / 60  # converting duration column to floats instead of strings
-    df_routes = pd.read_csv("data/Shanghai.routes", sep=' ')
-    df_routes["Duration[s]"] = pd.to_timedelta(df_routes["Duration[s]"]).dt.total_seconds() / 60  # converting duration column to floats instead of strings
+# DEMANDS (in kg)
+demands = df_nodes.drop(columns=['Id', 'Lon', 'Lat']).values.tolist()
 
-# 2. CREATING TEST DATASET AND ATTRIBUTES OF FUTURE INSTANCE
-testDimension = len(df_nodes)
+# VEHICLES
+payload = 900
+vehicles = 2
 
-# DON'T FORGET TO SET MORE VEHICLES IF YOU HAVE MORE CUSTOMERS
+location_list = create_graph(locations, demands)  # call the function to create the locations. 7 locations (2 of which with 0 demand at the end and start represent depos)
 
-if testDimension == len(df_nodes):
-    df_nodes_subset = df_nodes  # select all elements (choose if 112 customers)
-    df_routes_subset = df_routes  # select all elements (choose if 112 customers)
+cpx = cplex.Cplex()
+cpx.parameters.timelimit.set(225.0)  # you can set the time limit in seconds
+cpx.objective.set_sense(cpx.objective.sense.minimize)
 
-subsetDemand = list(df_nodes_subset.loc[:, "Demand[kg]"])  # select the demand column (in kg) and convert it to a list
+x = {i: {j: "x_" + str(i) + "_" + str(j) for j in range(len(location_list))} for i in range(len(location_list))}
 
-if kg_factor != 1:
-    print(f"original demand kg: {subsetDemand}")
-    for i in range(len(subsetDemand)):
-        subsetDemand[i] = round(subsetDemand[i] * kg_factor)
-    print(f"kg factor: {kg_factor}")
-    print(f"changed demand kg: {subsetDemand}\n")
+y = {i: "y_" + str(i) for i in range(len(location_list))}
 
-subsetVolume = list(df_nodes_subset.loc[:, "Demand[m^3*10^-3]"])  # select the demand column (in volume) and convert it to a list
-if vol_factor != 1:
-    print(f"original volume: {subsetVolume}")
-    for i in range(len(subsetVolume)):
-        subsetVolume[i] = round(subsetVolume[i] * kg_factor)
-    print(f"volume factor: {vol_factor}")
-    print(f"changed volume: {subsetVolume}\n")
+# _____DECISION VARIABLES_____
+for i in location_list:
+    for j in location_list:
+        if j.index != i.index:
+            cpx.variables.add(obj=[i.distance[j]], types=["B"], names=[x[i.index][j.index]])
 
-subsetDuration = list(df_nodes_subset.loc[:, "Duration"])  # select the duration column (in volume) and convert it to a list
+for i in location_list:
+    cpx.variables.add(lb=[i.demand[0]], ub=[payload], types=["C"], names=[y[i.index]])
+    # note that y variables are continuous
 
-subsetDistances = {}  # create tuples with distances from one Id to another
-for row, content in df_routes_subset.iterrows():
-    key = (int(content[0][1:]), int(content[1][1:]))
-    subsetDistances[key] = content[2]
+# _____CONSTRAINTS_____
+for i in location_list: # constraints 1 (2.2)
+    if i.index != 0 and i.index != len(location_list) - 1:
+        coef_1, var_1 = [], []
+        for j in location_list:
+            if j.index != i.index and j.index != 0:
+                coef_1.append(1)
+                var_1.append(x[i.index][j.index])
+        cpx.linear_constraints.add(lin_expr=[[var_1, coef_1]], senses=["E"], rhs=[1])
 
-subsetDistanceInside = {}  # create tuples with distances from one Id to another inside the city
-for row, content in df_routes_subset.iterrows():
-    key = (int(content[0][1:]), int(content[1][1:]))
-    subsetDistanceInside[key] = content[3]
+for h in location_list: # constraints 2 (2.3)
+    if h.index != 0 and h.index != len(location_list) - 1:
+        coef_2, var_2 = [], []
+        for i in location_list:
+            if i.index != len(location_list) - 1 and i is not h:
+                coef_2.append(1)
+                var_2.append(x[i.index][h.index])
+        for j in location_list:
+            if j.index != 0 and j is not h:
+                coef_2.append(-1)
+                var_2.append(x[h.index][j.index])
+        cpx.linear_constraints.add(lin_expr=[[var_2, coef_2]], senses=["E"], rhs=[0])
 
-subsetDistanceOutside = {}  # create tuples with distances from one Id to another outside the city
-for row, content in df_routes_subset.iterrows():
-    key = (int(content[0][1:]), int(content[1][1:]))
-    subsetDistanceOutside[key] = content[4]
+coef_3, var_3 = [], [] # constraints 3 (2.4)
+for j in location_list:
+    if j.index != 0 and j.index != len(location_list) - 1:
+        coef_3.append(1)
+        var_3.append(x[0][j.index])
+cpx.linear_constraints.add(lin_expr=[[var_2, coef_2]], senses=["L"], rhs=[vehicles])
 
-subsetArcDuration = {}
-for row, content in df_routes_subset.iterrows():
-    key = (int(content[0][1:]), int(content[1][1:]))
-    subsetArcDuration[key] = content[5]
+for i in location_list: # constraints 4 (2.5)
+    for j in location_list:
+        if j.index != i.index:
+            coef_4 = [1, -1, -j.demand[0] - payload]
+            var_4 = [y[j.index], y[i.index], x[i.index][j.index]]
+            cpx.linear_constraints.add(lin_expr=[[var_4, coef_4]], senses=["G"], rhs=[-payload])
 
-coordinates = []
-for row, content in df_nodes_subset.iterrows():
-    coordinate = (content[1], content[2])
-    coordinates.append(coordinate)
-
-outside_dictionary = inner_city_check(df_nodes_subset, subsetDistanceInside, subsetDistanceOutside)
-
-# 3. CREATING OUR VEHICLES
-# create vehicles via function in Trucks.py-file
-listOfInitialVehicles = create_vehicles(city, city_cost_level, numI_Atego, numI_VWTrans, numI_VWCaddy, numI_DeFuso, numI_ScooterL, numI_ScooterS, numI_eCargoBike, fixed_cost_active, tax_ins_active)
-print(f"List of initial Vehicle payloads_kg: {list(map(lambda x: x.payload_kg, listOfInitialVehicles))}")
-
-# test feasibility of our vehicle assignment. Need enough capacity to carry all demand
-sumOfDemand = sum(subsetDemand)
-sumOfCapacity = numI_Atego * 2800 + numI_VWTrans * 883 + numI_VWCaddy * 670 + numI_DeFuso * 2800 + numI_ScooterL * 905 + numI_ScooterS * 720 + numI_eCargoBike * 100
-if sumOfCapacity < sumOfDemand:
-    print(f"Not enough Capacity ({sumOfCapacity}) for Demand ({sumOfDemand})")
-    sys.exit()
-
-# 4. RUN THE ALGORITHM
-n = 0
-for a in params_dict['max_iterations']:
-    for b in params_dict['init_temp']:
-        for c in params_dict['temp_target_percentage']:
-            for d in params_dict['temp_target_iteration']:
-                for e in params_dict['freeze_period_length']:
-                    for f in params_dict['destroy_random_ub']:
-                        for g in params_dict['destroy_expensive_ub']:
-                            for h in params_dict['destroy_route_ub']:
-                                for i_par in params_dict['destroy_related_ub']:
-                                    for j in params_dict['max_weight']:
-                                        for k in params_dict['min_weight']:
-                                            for l in params_dict['reduce_step']:
-                                                for m in params_dict['step_penalty']:
-                                                    parser = argparse.ArgumentParser()
-                                                    parser.add_argument('--' + str('max_iterations'), default=a)
-                                                    parser.add_argument('--' + str('init_temp'), default=b)
-                                                    parser.add_argument('--' + str('temp_target_percentage'), default=c)
-                                                    parser.add_argument('--' + str('temp_target_iteration'), default=d)
-                                                    parser.add_argument('--' + str('freeze_period_length'), default=e)
-                                                    parser.add_argument('--' + str('destroy_random_ub'), default=f)
-                                                    parser.add_argument('--' + str('destroy_expensive_ub'), default=g)
-                                                    parser.add_argument('--' + str('destroy_route_ub'), default=h)
-                                                    parser.add_argument('--' + str('destroy_related_ub'), default=i_par)
-                                                    parser.add_argument('--' + str('max_weight'), default=j)
-                                                    parser.add_argument('--' + str('min_weight'), default=k)
-                                                    parser.add_argument('--' + str('reduce_step'), default=l)
-                                                    parser.add_argument('--' + str('step_penalty'), default=m)
-                                                    args = parser.parse_args()
-                                                    ourInstance = Instance_tune(testDimension, listOfInitialVehicles,
-                                                                                subsetDemand,
-                                                                                subsetVolume,
-                                                                                subsetDuration,
-                                                                                subsetDistances,
-                                                                                subsetDistanceInside,
-                                                                                subsetDistanceOutside,
-                                                                                subsetArcDuration, coordinates,
-                                                                                args)
-                                                    bestCostRandomSweep = 10e10
-                                                    start_time_run = time.perf_counter()
-                                                    for i in range(10):
-                                                        tempSolutionRandomSweep = random_sweep(ourInstance,
-                                                                                               listOfInitialVehicles)
-                                                        tempCost = solution_cost(tempSolutionRandomSweep, ourInstance,
-                                                                                 0, True)
-                                                        # print(f"Rand Sweep Heuristic, temp distance: {compute_distances(tempSolutionRandomSweep, ourInstance)}")
-                                                        if tempCost < bestCostRandomSweep:
-                                                            bestSolutionRandomSweep = copy.deepcopy(
-                                                                tempSolutionRandomSweep)
-                                                            bestCostRandomSweep = tempCost
-                                                    listOfInitAvailableVehicles = vehicle_assignment(
-                                                        bestSolutionRandomSweep,
-                                                        listOfInitialVehicles, ourInstance,
-                                                        0, True)
-                                                    sol, final_cost, feasible = ouralgorithm(ourInstance, bestSolutionRandomSweep,
-                                                                                   listOfInitialVehicles,
-                                                                                   listOfInitAvailableVehicles,
-                                                                                   coordinates)
-                                                    end_time_run = time.perf_counter()
-                                                    runtime_run = end_time_run - start_time_run
-                                                    print(f"numI_Atego: {numI_Atego,}, numI_VWTrans: {numI_VWTrans}, numI_VWCaddy: {numI_VWCaddy}, numI_DeFuso: {numI_DeFuso}, numI_ScooterL: {numI_ScooterL}, numI_ScooterS: {numI_ScooterS}, numI_eCargoBike: {numI_eCargoBike}")
-                                                    no_depot_title = 'No Depot Plot ' + str(n)
-                                                    depot_title = 'Route Plot in Permutation ' + str(n)
-                                                    # plotVRP(sol, coordinates, False, no_depot_title)
-                                                    plotVRP(sol, coordinates, outside_dictionary, True, depot_title)
-
-                                                    perform_dict[n] = [a, b, c, d, e, f, g, h, i_par, j, k, l, m, feasible, fixed_cost_active, tax_ins_active, final_cost, runtime_run]
-                                                    n += 1
-
-summary_performance = pd.DataFrame.from_dict(perform_dict, orient='index', columns=list(params_dict.keys()) + ['feasible'] + ['fixed costs'] +['tax+ins'] + ['cost'] + ['runtime in s'])
-print()
-print(summary_performance)
-
-date_string = str(datetime.datetime.now())
-date_string = date_string.replace(":", "-")
-summary_performance.to_csv(date_string[:16] + ' - parameter_analysis.csv')
+print_solution(cpx, location_list, x, y) # solve the model and print the solution

@@ -1,2 +1,3 @@
-# Default ignored files
+# Default ignored directories
 /.idea/
+/venv/
