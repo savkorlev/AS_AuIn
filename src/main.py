@@ -1,27 +1,26 @@
 import pandas as pd
 import cplex
-import random
 from instances.Tools import create_graph, print_solution
 
-df_nodes = pd.read_csv("data/nodes.txt", sep=' ')
-df_nodes = df_nodes.drop(columns=['Demand[m^3*10^-3]', 'Duration'])
+df_nodes = pd.read_csv("data/nodes.txt")
 
-for row, content in df_nodes.iterrows():
-    if row == 0:
-        df_nodes.iloc[row, 1] = int(random.uniform(0, 500))
-        df_nodes.iloc[row, 2] = int(random.uniform(0, 500))
-    else:
-        df_nodes.iloc[row, 1] = int(random.uniform(0, 500))
-        df_nodes.iloc[row, 2] = int(random.uniform(0, 500))
-        df_nodes.iloc[row, 3] = int(random.uniform(300, 600))
-
+# PERMUTATION (if needed)
+# import random
+# for row, content in df_nodes.iterrows():
+#     if row == 0:
+#         df_nodes.iloc[row, 0] = int(random.uniform(0, 500))
+#         df_nodes.iloc[row, 1] = int(random.uniform(0, 500))
+#     else:
+#         df_nodes.iloc[row, 0] = int(random.uniform(0, 500))
+#         df_nodes.iloc[row, 1] = int(random.uniform(0, 500))
+#         df_nodes.iloc[row, 2] = int(random.uniform(300, 600))
 # df_nodes.to_csv('data/nodes_permutated.txt', index=False)
 
 # LOCATIONS (coordinates of nodes)
-locations = df_nodes.drop(columns=['Demand[kg]', 'Id']).values.tolist()
+locations = df_nodes.drop(columns=['Demand[kg]']).values.tolist()
 
 # DEMANDS (in kg)
-demands = df_nodes.drop(columns=['Id', 'Lon', 'Lat']).values.tolist()
+demands = df_nodes.drop(columns=['Lon', 'Lat']).values.tolist()
 
 # VEHICLES
 payload = 900
@@ -48,7 +47,7 @@ for i in location_list:
     # note that y variables are continuous
 
 # _____CONSTRAINTS_____
-for i in location_list: # constraints 1 (2.2)
+for i in location_list:  # constraints 1 (2.2)
     if i.index != 0 and i.index != len(location_list) - 1:
         coef_1, var_1 = [], []
         for j in location_list:
@@ -57,7 +56,7 @@ for i in location_list: # constraints 1 (2.2)
                 var_1.append(x[i.index][j.index])
         cpx.linear_constraints.add(lin_expr=[[var_1, coef_1]], senses=["E"], rhs=[1])
 
-for h in location_list: # constraints 2 (2.3)
+for h in location_list:  # constraints 2 (2.3)
     if h.index != 0 and h.index != len(location_list) - 1:
         coef_2, var_2 = [], []
         for i in location_list:
@@ -70,18 +69,18 @@ for h in location_list: # constraints 2 (2.3)
                 var_2.append(x[h.index][j.index])
         cpx.linear_constraints.add(lin_expr=[[var_2, coef_2]], senses=["E"], rhs=[0])
 
-coef_3, var_3 = [], [] # constraints 3 (2.4)
+coef_3, var_3 = [], []  # constraints 3 (2.4)
 for j in location_list:
     if j.index != 0 and j.index != len(location_list) - 1:
         coef_3.append(1)
         var_3.append(x[0][j.index])
 cpx.linear_constraints.add(lin_expr=[[var_2, coef_2]], senses=["L"], rhs=[vehicles])
 
-for i in location_list: # constraints 4 (2.5)
+for i in location_list:  # constraints 4 (2.5)
     for j in location_list:
         if j.index != i.index:
             coef_4 = [1, -1, -j.demand[0] - payload]
             var_4 = [y[j.index], y[i.index], x[i.index][j.index]]
             cpx.linear_constraints.add(lin_expr=[[var_4, coef_4]], senses=["G"], rhs=[-payload])
 
-print_solution(cpx, location_list, x, y) # solve the model and print the solution
+print_solution(cpx, location_list, x, y)  # solve the model and print the solution
