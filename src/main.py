@@ -24,7 +24,7 @@ demands = df_nodes.drop(columns=['Lon', 'Lat']).values.tolist()
 
 # VEHICLES
 payload = 900
-vehicles = 2
+vehicles = 6
 
 location_list = create_graph(locations, demands)  # call the function to create the locations. 7 locations (2 of which with 0 demand at the end and start represent depos)
 
@@ -75,6 +75,7 @@ for j in location_list:
         coef_3.append(1)
         var_3.append(x[0][j.index])
 cpx.linear_constraints.add(lin_expr=[[var_2, coef_2]], senses=["L"], rhs=[vehicles])
+# change var_2, coef_2 in the line above to var_3, coef_3?
 
 for i in location_list:  # constraints 4 (2.5)
     for j in location_list:
