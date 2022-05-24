@@ -62,6 +62,7 @@ def print_solution(cpx, location_list, x, y): # a function to evaluate and print
         print("Route for vehicle " + str(i + 1))
         for j in range(len(routes[i]) - 1):
             print(str(routes[i][j]) + " load: (" + str(solution_y[routes[i][j]]) + ") --> ", end=' ')
-        print("0") # 0 presents the return here
+        print("0")  # 0 presents the return here
         print("Route length: " + str(route_length[i]))
         print()
+
