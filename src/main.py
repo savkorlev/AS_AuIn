@@ -2,6 +2,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 import random
+import math
 from docplex.mp.model import Model
 
 df_nodes = pd.read_csv("data/nodes.txt")
@@ -54,13 +55,15 @@ for j in N:
     for p in P:
         sum_b_j += b_jp[(j, p)]
     b_j[j] = sum_b_j
-# TODO: the average number of boxes collected from supplier j per each visit if supplier j is visited s = demand?
+# TODO: the average number of boxes collected from supplier j per each visit if supplier j is visited s times?
 d_p = {p: random.uniform(8, 20) for p in P}  # the due date of P-LANE p. Time interval from 8 AM to 8 PM. TODO: make it actual times and part of dataset and not randomly generated
 theta = 5  # earliness cost
 psi = 5  # tardiness cost
 omega = 5  # fixed cost per vehicle per visit
-u_j = {p: random.uniform(0.25, 0.5) for j in N}  # unloading time per box for the parts collected from supplier j - lies between 15 and 30 minutes. TODO: make it actual times and part of dataset and not randomly generated
-# TODO: visiting frequencies
+u_j = {j: random.uniform(0.25, 0.5) for j in N}  # unloading time per box for the parts collected from supplier j - lies between 15 and 30 minutes. TODO: make it actual times and part of dataset and not randomly generated
+F = {}  # set of visiting frequencies
+for j in b_j:
+    F[j] = list(range(1, math.ceil(b_j[j] / Q)))
 '''
 Summary before the constraints and variables:
 payload   payload of a vehicle
