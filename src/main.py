@@ -19,8 +19,7 @@ df_nodes = pd.read_csv("data/nodes.txt")
 # df_nodes.to_csv('data/nodes_permutated.txt', index=False)
 
 # VEHICLES
-payload = 10  # boxes
-
+Q = 10  # capacity in boxes TODO: shouldn't be kilograms?
 N = []  # set of nodes without the depot
 for i in range(1, len(df_nodes)):
     N.append(i)
@@ -55,7 +54,7 @@ for j in N:
     for p in P:
         sum_b_j += b_jp[(j, p)]
     b_j[j] = sum_b_j
-# TODO: what is the average number of boxes collected from supplier j per each visit if supplier j is visited s times and how it deffers from Q
+# TODO: the average number of boxes collected from supplier j per each visit if supplier j is visited s = demand?
 d_p = {p: random.uniform(8, 20) for p in P}  # the due date of P-LANE p. Time interval from 8 AM to 8 PM. TODO: make it actual times and part of dataset and not randomly generated
 theta = 5  # earliness cost
 psi = 5  # tardiness cost
