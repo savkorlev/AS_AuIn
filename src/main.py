@@ -1,6 +1,7 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
+import random
 from docplex.mp.model import Model
 
 df_nodes = pd.read_csv("data/nodes.txt")
@@ -18,13 +19,13 @@ df_nodes = pd.read_csv("data/nodes.txt")
 # df_nodes.to_csv('data/nodes_permutated.txt', index=False)
 
 # VEHICLES
-payload = 900
+payload = 10  # boxes
 
-N = []  # nodes without the depot
+N = []  # set of nodes without the depot
 for i in range(1, len(df_nodes)):
     N.append(i)
-V = [0] + N  # nodes with the depot
-q = {i: df_nodes.iloc[i, 2] for i in N}  # demands
+V = [0] + N  # set of nodes with the depot
+q = {i: df_nodes.iloc[i, 2] for i in N}  # set of demands TODO: should be boxes = b_jp?
 
 loc_x = df_nodes["Lon"].to_list()
 loc_y = df_nodes["Lat"].to_list()
@@ -36,14 +37,49 @@ loc_y = df_nodes["Lat"].to_list()
 # plt.axis('equal')
 # plt.show()
 
-A = [(i, j) for i in V for j in V if i != j]  # (0,1), (0,2) and so on - arcs
-c = {(i, j): np.hypot(loc_x[i]-loc_x[j], loc_y[i]-loc_y[j]) for i, j in A}  # cost between arcs - distance
+A = [(i, j) for i in V for j in V if i != j]  # (0,1), (0,2) and so on - set of arcs
+c_jk = {(i, j): np.hypot(loc_x[i]-loc_x[j], loc_y[i]-loc_y[j]) for i, j in A}  # set of costs between arcs - distances
+
+# ADDITIONS (differ from the youtube vid)
+R = []  # set of routes
+for i in range(1, len(df_nodes)):
+    R.append(i)
+P = []  # set of P-LANEs
+for i in range(1, len(df_nodes)):
+    P.append(i)
+f = 10  # transportation cost per unit distance
+b_jp = {(j, p): random.randint(1, 9) for j in N for p in P}  # number of boxes needed from supplier j ∈ V\{0} on P-LANE p ∈ P (from supplier j ∈ N) TODO: add it to dataset instead of generating here
+b_j = {}  # total number of boxes needed from supplier j in manufacturer’s one-day production
+for j in N:
+    sum_b_j = 0
+    for p in P:
+        sum_b_j += b_jp[(j, p)]
+    b_j[j] = sum_b_j
+# TODO: what is the average number of boxes collected from supplier j per each visit if supplier j is visited s times and how it deffers from Q
+d_p = {p: random.uniform(8, 20) for p in P}  # the due date of P-LANE p. Time interval from 8 AM to 8 PM. TODO: make it actual times and part of dataset and not randomly generated
+theta = 5  # earliness cost
+psi = 5  # tardiness cost
+omega = 5  # fixed cost per vehicle per visit
+u_j = {p: random.uniform(0.25, 0.5) for j in N}  # unloading time per box for the parts collected from supplier j - lies between 15 and 30 minutes. TODO: make it actual times and part of dataset and not randomly generated
+# TODO: visiting frequencies
+'''
+Summary before the constraints and variables:
+payload   payload of a vehicle
+N         set of nodes without the depot (set of suppliers)
+V         set of nodes with the depot (vertex set)
+q         set of demands
+A         set of arcs (arc set)
+c         set of costs (distances) between arcs 
+Missing:
+set of routes
+set of p-lane
+'''
 
 mdl = Model('CVRP')
 
 # VARIABLES
 x = mdl.binary_var_dict(A, name='x')  # do we select an arc
-u = mdl.continuous_var_dict(N, ub=payload, name='u')  #
+u = mdl.continuous_var_dict(N, ub=payload, name='u')  # Q is upperbound
 
 # OBJECTIVE
 mdl.minimize(mdl.sum(c[i, j]*x[i, j] for i, j in A))
