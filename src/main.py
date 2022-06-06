@@ -7,16 +7,27 @@ from docplex.mp.model import Model
 
 df_nodes = pd.read_csv("data/nodes.txt")
 
+# TODO: can't really use Demand here (P-LANE)
+
+# # Example of how to add a new column to a dataframe
+# unloading_times = []
+# for i in range(len(df_nodes)):
+#     unloading_times.append(int(round(random.uniform(600, 1200), 0)))
+# df_nodes['Unloading Times[sec]'] = unloading_times
+# df_nodes.to_csv('data/new_column_nodes', index=False)
+
 # # PERMUTATION (if needed)
-# import random
 # for row, content in df_nodes.iterrows():
 #     if row == 0:
-#         df_nodes.iloc[row, 0] = int(random.uniform(0, 500))
-#         df_nodes.iloc[row, 1] = int(random.uniform(0, 500))
+#         df_nodes.iloc[row, 0] = random.uniform(0, 500)
+#         df_nodes.iloc[row, 1] = random.uniform(0, 500)
+#         df_nodes.iloc[row, 2] = 0
+#         df_nodes.iloc[row, 3] = 0
 #     else:
-#         df_nodes.iloc[row, 0] = int(random.uniform(0, 500))
-#         df_nodes.iloc[row, 1] = int(random.uniform(0, 500))
-#         df_nodes.iloc[row, 2] = int(random.uniform(300, 600))
+#         df_nodes.iloc[row, 0] = random.uniform(0, 500)
+#         df_nodes.iloc[row, 1] = random.uniform(0, 500)
+#         df_nodes.iloc[row, 2] = int(random.uniform(1, 9))
+#         df_nodes.iloc[row, 3] = int(random.uniform(600, 1200))
 # df_nodes.to_csv('data/nodes_permutated.txt', index=False)
 
 # VEHICLES
