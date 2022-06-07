@@ -6,17 +6,33 @@ import math
 from docplex.mp.model import Model
 
 df_nodes = pd.read_csv("data/nodes.txt")
+df_routes = pd.read_csv("data/routes.txt")
 
-# TODO: can't really use Demand here (P-LANE)
+# DATA HANDLING
 
-# # Example of how to add a new column to a dataframe
+# # ADD a new column to a dataframe
 # unloading_times = []
 # for i in range(len(df_nodes)):
 #     unloading_times.append(int(round(random.uniform(600, 1200), 0)))
 # df_nodes['Unloading Times[sec]'] = unloading_times
-# df_nodes.to_csv('data/new_column_nodes', index=False)
+# df_nodes.to_csv('data/new_column_nodes.txt', index=False)
 
-# # PERMUTATION (if needed)
+# # DELETE a column
+# df_nodes.drop('Demand[boxes]', axis = 1)
+# df_nodes.to_csv('data/new_column_nodes.txt', index=False)
+
+# # CREATE a dataframe
+# df_routes = pd.DataFrame()
+# number_of_PLANEs = 4
+# _from_ = []
+# _to_ = []
+# for i in range(1, len(df_nodes)):
+#     _from_.extend([i] * number_of_PLANEs)
+#     _to_.extend(range(1, 5))
+# df_routes['From [supplier]'] = _from_
+# df_routes['To [P-LANE]'] = _to_
+
+# # PERMUTATION (change if needed)
 # for row, content in df_nodes.iterrows():
 #     if row == 0:
 #         df_nodes.iloc[row, 0] = random.uniform(0, 500)
@@ -30,13 +46,13 @@ df_nodes = pd.read_csv("data/nodes.txt")
 #         df_nodes.iloc[row, 3] = int(random.uniform(600, 1200))
 # df_nodes.to_csv('data/nodes_permutated.txt', index=False)
 
-# VEHICLES
-Q = 10  # capacity in boxes TODO: shouldn't be kilograms?
+
+
+Q = 10  # vehicle capacity in boxes TODO: shouldn't be kilograms?
 N = []  # set of nodes without the depot
 for i in range(1, len(df_nodes)):
     N.append(i)
 V = [0] + N  # set of nodes with the depot
-q = {i: df_nodes.iloc[i, 2] for i in N}  # set of demands TODO: should be boxes = b_jp?
 
 loc_x = df_nodes["Lon"].to_list()
 loc_y = df_nodes["Lat"].to_list()
@@ -52,29 +68,43 @@ A = [(i, j) for i in V for j in V if i != j]  # (0,1), (0,2) and so on - set of 
 c_jk = {(i, j): np.hypot(loc_x[i]-loc_x[j], loc_y[i]-loc_y[j]) for i, j in A}  # set of costs between arcs - distances
 
 # ADDITIONS (differ from the youtube vid)
+
 R = []  # set of routes
 for i in range(1, len(df_nodes)):
     R.append(i)
+
 P = []  # set of P-LANEs
-for i in range(1, len(df_nodes)):
+for i in range(1, df_routes['To[P-LANE]'].nunique() + 1):  # number of unique values = number of P-LANEs
     P.append(i)
-f = 10  # transportation cost per unit distance
-b_jp = {(j, p): random.randint(1, 9) for j in N for p in P}  # number of boxes needed from supplier j ∈ V\{0} on P-LANE p ∈ P (from supplier j ∈ N) TODO: add it to dataset instead of generating here
+
+f = 5  # transportation cost per unit distance
+
+b_jp = {}  # number of boxes needed from supplier j ∈ V\{0} on P-LANE p ∈ P (from supplier j ∈ N)
+for row, content in df_routes.iterrows():
+    b_jp[(content[0], content[1])] = content[2]
+
 b_j = {}  # total number of boxes needed from supplier j in manufacturer’s one-day production
 for j in N:
     sum_b_j = 0
     for p in P:
         sum_b_j += b_jp[(j, p)]
     b_j[j] = sum_b_j
-# TODO: the average number of boxes collected from supplier j per each visit if supplier j is visited s times?
-d_p = {p: random.uniform(8, 20) for p in P}  # the due date of P-LANE p. Time interval from 8 AM to 8 PM. TODO: make it actual times and part of dataset and not randomly generated
+
+# TODO: the average number of boxes collected from supplier j per each visit if supplier j is visited s times? Calculate that for every supplier j (just like b_j) - divide b_j by F
+
+d_p = {p: random.uniform(8, 20) for p in P}  # the due date of P-LANE p. Time interval from 8 AM to 8 PM. TODO: make it actual times and part of dataset and not randomly generated. Issue - we don't have a dataset for P-LANEs
+
 theta = 5  # earliness cost
 psi = 5  # tardiness cost
 omega = 5  # fixed cost per vehicle per visit
-u_j = {j: random.uniform(0.25, 0.5) for j in N}  # unloading time per box for the parts collected from supplier j - lies between 15 and 30 minutes. TODO: make it actual times and part of dataset and not randomly generated
+
+u_j = {}  # unloading time per box for the parts collected from supplier j (in seconds))
+for row, content in df_nodes.iloc[1:].iterrows():
+    u_j[row] = content[2]
+
 F = {}  # set of visiting frequencies
 for j in b_j:
-    F[j] = list(range(1, math.ceil(b_j[j] / Q)))
+    F[j] = list(range(1, math.ceil(b_j[j] / Q) + 1))  # maybe just use max of all suppliers instead
 '''
 Summary before the constraints and variables:
 payload   payload of a vehicle
@@ -87,6 +117,10 @@ Missing:
 set of routes
 set of p-lane
 '''
+
+# 1) All P-PANEs lie in the depot
+# 2) Make a routes file (demands from the supplier to the P-LANE)
+# 3)
 
 mdl = Model('CVRP')
 
@@ -180,7 +214,6 @@ plt.show()
 #     cpx.variables.add(lb=[i.demand[0]], ub=[payload], types=["C"], names=[y[i.index]])
 #     # note that y variables are continuous
 #
-# # TODO: add more variables
 #
 # # _____CONSTRAINTS_____
 # # all nodes are visited exactly once
