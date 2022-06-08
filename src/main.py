@@ -48,7 +48,7 @@ df_routes = pd.read_csv("data/routes.txt")
 
 
 
-Q = 10  # vehicle capacity in boxes TODO: shouldn't be kilograms?
+Q = 10  # vehicle capacity in boxes
 N = []  # set of nodes without the depot
 for i in range(1, len(df_nodes)):
     N.append(i)
@@ -77,8 +77,6 @@ P = []  # set of P-LANEs
 for i in range(1, df_routes['To[P-LANE]'].nunique() + 1):  # number of unique values = number of P-LANEs
     P.append(i)
 
-f = 5  # transportation cost per unit distance
-
 b_jp = {}  # number of boxes needed from supplier j ∈ V\{0} on P-LANE p ∈ P (from supplier j ∈ N)
 for row, content in df_routes.iterrows():
     b_jp[(content[0], content[1])] = content[2]
@@ -90,47 +88,78 @@ for j in N:
         sum_b_j += b_jp[(j, p)]
     b_j[j] = sum_b_j
 
-# TODO: the average number of boxes collected from supplier j per each visit if supplier j is visited s times? Calculate that for every supplier j (just like b_j) - divide b_j by F
+random.seed(0)
+# d_p = {p: int(random.uniform(8, 20)) * 3600 for p in P}  # the due date of P-LANE p (in seconds). Time interval from 8 AM to 8 PM
+d_p = {p: int(random.uniform(0, 12)) * 3600 for p in P}  # the due date of P-LANE p (in seconds). Time interval from the beginning of operating day to the end
+# TODO: make it actual times and part of dataset and not randomly generated
+#  Issue - we don't have a dataset for P-LANEs
+#  Second issue - make it actual daytime (from 08:00 to 20:00) or time from the start of the operating cycle (from 00:00 to 12:00)
+#  Third issue - seconds or hours?
 
-d_p = {p: random.uniform(8, 20) for p in P}  # the due date of P-LANE p. Time interval from 8 AM to 8 PM. TODO: make it actual times and part of dataset and not randomly generated. Issue - we don't have a dataset for P-LANEs
-
+f = 5  # transportation cost per unit distance
 theta = 5  # earliness cost
 psi = 5  # tardiness cost
 omega = 5  # fixed cost per vehicle per visit
 
-u_j = {}  # unloading time per box for the parts collected from supplier j (in seconds))
+u_j = {}  # unloading time per box for the parts collected from supplier j (in seconds)
 for row, content in df_nodes.iloc[1:].iterrows():
     u_j[row] = content[2]
 
 F = {}  # set of visiting frequencies
 for j in b_j:
-    F[j] = list(range(1, math.ceil(b_j[j] / Q) + 1))  # maybe just use max of all suppliers instead
+    F[j] = math.ceil(b_j[j] / Q)  # !!! not exactly like in the base model (not using range)
+    # F[j] = list(range(1, math.ceil(b_j[j] / Q) + 1))  # all visiting frequencies (old version)
+
+nu_js = {}  # the average number of boxes collected from supplier j per each visit if supplier j is visited s times
+for j in range(1, len(b_j) + 1):
+    nu_js[j] = math.ceil(b_j[j]/F[j])  # !!! not exactly like in the base model (not considering s like (1, 1), (1, 2), etc.
+
 '''
 Summary before the constraints and variables:
-payload   payload of a vehicle
+Q         vehicle capacity in boxes
 N         set of nodes without the depot (set of suppliers)
 V         set of nodes with the depot (vertex set)
-q         set of demands
 A         set of arcs (arc set)
-c         set of costs (distances) between arcs 
-Missing:
-set of routes
-set of p-lane
+c_jk      set of costs (distances) between arcs
+R         set of routes
+P         set of P-LANEs
+b_jp      number of boxes needed from supplier j ∈ V\{0} on P-LANE p ∈ P (from supplier j ∈ N)
+b_j       total number of boxes needed from supplier j in manufacturer’s one-day production
+d_p       the due date of P-LANE p. Time interval from 0 to 12 (check the related todo!)
+f         transportation cost per unit distance
+theta     earliness cost
+psi       tardiness cost
+omega     fixed cost per vehicle per visit
+u_j       unloading time per box for the parts collected from supplier j (in seconds))
+F         set of visiting frequencies
+nu_js     the average number of boxes collected from supplier j per each visit if supplier j is visited s times
 '''
-
-# 1) All P-PANEs lie in the depot
-# 2) Make a routes file (demands from the supplier to the P-LANE)
-# 3)
 
 mdl = Model('CVRP')
 
 # VARIABLES
-x = mdl.binary_var_dict(A, name='x')  # do we select an arc
-u = mdl.continuous_var_dict(N, ub=payload, name='u')  # Q is upperbound
+# TODO: check all inbracket parameters (don't really get what they're supposed to be)
+x_r = mdl.binary_var_dict(R, name='x_r')  # do we select a route
+y_jr = mdl.binary_var_dict(V, name='y_jr')  # is the supplier assigned !!! to route?
+z_jkr = mdl.binary_var_dict(A, name='z_jkr')  # is arc (j, k) visited !!! by route r?
+u_rs = mdl.binary_var_dict(R, name='u_rs')  # is frequency of route r s?
+D_rs = mdl.continuous_var_dict(R, name='D_rs')  # the departure time of the sth visit from the manufacturer for route r
+A_rs = mdl.continuous_var_dict(R, name='A_rs')  # the arrival time of the sth visit from the manufacturer for route r
+sigma_jrs = mdl.binary_var_dict(R, name='sigma_jrs')  # is equal to 1 if y_jr = 1, u_rs = 1 and 0 otherwise. Wrong parameter possibly
+delta_jkrs = mdl.binary_var_dict(R, name='delta_jkrs')  # is equal to 1 if z_jkr = 1, u_rs = 1 and 0 otherwise. Wrong parameter possibly
+epsilon_jrstp = mdl.binary_var_dict(R, name='epsilon_jrstp')  # is equal to 1 if delta_jrs = 1 and t-th visit of route r meet the demand needed from supplier j on P-LANE p and 0 otherwise. Wrong parameter possibly
+F_jp = mdl.continuous_var_dict(V, name='F_jp')  # is the finish time when the parts collected from supplier j meet the demand on P-LANE p
+E_jp = mdl.continuous_var_dict(V, name='E_jp')  # is the earliness of supplier j on P-LANE p
+T_jp = mdl.continuous_var_dict(V, name='T_jp')  # is the tardiness time of supplier j on P-LANE p
+M = 10e10  # sufficiently big number
 
 # OBJECTIVE
-mdl.minimize(mdl.sum(c[i, j]*x[i, j] for i, j in A))
+mdl.minimize(mdl.sum(f * s * c_jk[j, k] * delta_jkrs[j, k, r, s] for j, k in A for r in R for s in F) +
+             mdl.sum(omega * s * u_rs[r, s] for r in R for s in F) +
+             mdl.sum(theta * E_jp[j, p] for j in N for p in P) +
+             mdl.sum(psi * T_jp[j, p] for j in N for p in P))
 
+# EVERYTHING NEXT HASN'T BEEN DONE YET
 # CONSTRAINTS
 mdl.add_constraints(mdl.sum(x[i, j] for j in V if j != i) == 1 for i in N)
 mdl.add_constraints(mdl.sum(x[i, j] for i in V if i != j) == 1 for j in N)
