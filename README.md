@@ -4,7 +4,7 @@
 The software was tested in the PyCharm environment. 
 You can download a free version at [https://www.jetbrains.com/pycharm/download/](https://www.jetbrains.com/pycharm/download/).
 ## Python
-Make sure to have Python installed that is at least version 3.9.0.
+Make sure to have Python installed that is at version 3.8.0.
 ## Running the software
 The most convenient way to start the software is to run the "main.py" file that is included in the project in "\AS_AuIn\src\main.py".
 Before that, however, make sure that the following conditions are fulfilled:
