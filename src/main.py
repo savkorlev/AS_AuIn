@@ -140,18 +140,18 @@ mdl = Model('CVRP')
 # VARIABLES
 # TODO: check all inbracket parameters (don't really get what they're supposed to be)
 x_r = mdl.binary_var_dict(R, name='x_r')  # do we select a route
-y_jr = mdl.binary_var_dict(V, name='y_jr')  # is the supplier assigned !!! to route?
-z_jkr = mdl.binary_var_dict(A, name='z_jkr')  # is arc (j, k) visited !!! by route r?
-u_rs = mdl.binary_var_dict(R, name='u_rs')  # is frequency of route r s?
-D_rs = mdl.continuous_var_dict(R, name='D_rs')  # the departure time of the sth visit from the manufacturer for route r
-A_rs = mdl.continuous_var_dict(R, name='A_rs')  # the arrival time of the sth visit from the manufacturer for route r
-sigma_jrs = mdl.binary_var_dict(R, name='sigma_jrs')  # is equal to 1 if y_jr = 1, u_rs = 1 and 0 otherwise. Wrong parameter possibly
-delta_jkrs = mdl.binary_var_dict(R, name='delta_jkrs')  # is equal to 1 if z_jkr = 1, u_rs = 1 and 0 otherwise. Wrong parameter possibly
-epsilon_jrstp = mdl.binary_var_dict(R, name='epsilon_jrstp')  # is equal to 1 if delta_jrs = 1 and t-th visit of route r meet the demand needed from supplier j on P-LANE p and 0 otherwise. Wrong parameter possibly
-F_jp = mdl.continuous_var_dict(V, name='F_jp')  # is the finish time when the parts collected from supplier j meet the demand on P-LANE p
-E_jp = mdl.continuous_var_dict(V, name='E_jp')  # is the earliness of supplier j on P-LANE p
-T_jp = mdl.continuous_var_dict(V, name='T_jp')  # is the tardiness time of supplier j on P-LANE p
-M = 10e10  # sufficiently big number
+y_jr = mdl.binary_var_dict(((j,r) for j in V for r in R), name='y_jr')  # is the supplier assigned !!! to route?
+z_jkr = mdl.binary_var_dict(((j,k,r) for j,k in A for r in R), name='z_jkr')  # is arc (j, k) visited !!! by route r?
+u_rs = mdl.binary_var_dict(((r,s) for r in R for s in F), name='u_rs')  # is frequency of route r s? Lukas: because of that I think its easier when F is just a list going from 1 to the largest possible visting frequency for any supplier
+D_rs = mdl.continuous_var_dict(((r,s) for r in R for s in F), name='D_rs')  # the departure time of the sth visit from the manufacturer for route r Lukas: Frequency again
+A_rs = mdl.continuous_var_dict(((r,s) for r in R for s in F), name='A_rs')  # the arrival time of the sth visit from the manufacturer for route r
+sigma_jrs = mdl.binary_var_dict(((j,r,s) for j in V for r in R for s in F), name='sigma_jrs')  # is equal to 1 if y_jr = 1, u_rs = 1 and 0 otherwise. Wrong parameter possibly
+delta_jkrs = mdl.binary_var_dict(((j,k,r,s) for j,k in A for r in R for s in F), name='delta_jkrs')  # is equal to 1 if z_jkr = 1, u_rs = 1 and 0 otherwise. Wrong parameter possibly
+epsilon_jrstp = mdl.binary_var_dict(((j,r,s,t,p) for j in V for r in R for s in F for t in F for p in P), name='epsilon_jrstp')  # is equal to 1 if delta_jrs = 1 and t-th visit of route r meet the demand needed from supplier j on P-LANE p and 0 otherwise. Wrong parameter possibly
+F_jp = mdl.continuous_var_dict(((j,p) for j in V for p in P), name='F_jp')  # is the finish time when the parts collected from supplier j meet the demand on P-LANE p
+E_jp = mdl.continuous_var_dict(((j,p) for j in V for p in P), name='E_jp')  # is the earliness of supplier j on P-LANE p
+T_jp = mdl.continuous_var_dict(((j,p) for j in V for p in P), name='T_jp')  # is the tardiness time of supplier j on P-LANE p
+M = 10e10  # sufficiently big number Lukas: might be a little bit too big, reducing it would be benefical for solving time, issue of parameter tuning
 
 # OBJECTIVE
 mdl.minimize(mdl.sum(f * s * c_jk[j, k] * delta_jkrs[j, k, r, s] for j, k in A for r in R for s in F) +
