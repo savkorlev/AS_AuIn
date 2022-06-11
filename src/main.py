@@ -108,7 +108,8 @@ F.extend(list(range(1, math.ceil(b_j[j] / Q) + 1)))  # all visiting frequencies 
 
 nu_js = {}  # the average number of boxes collected from supplier j per each visit if supplier j is visited s times
 for j in range(1, len(b_j) + 1):
-    nu_js[j] = math.ceil(b_j[j]/max(F))  # !!! not exactly like in the base model (not considering s like (1, 1), (1, 2), etc. # TODO: make a matrix
+    for s in F:
+        nu_js[(j, s)] = b_j[j]/s  # !!! TODO: number of decimals?
 
 '''
 Summary before the constraints and variables:
@@ -134,7 +135,6 @@ nu_js     the average number of boxes collected from supplier j per each visit i
 mdl = Model('CVRP')
 
 # VARIABLES
-# TODO: check all inbracket parameters (don't really get what they're supposed to be)
 x_r = mdl.binary_var_dict(R, name='x_r')  # do we select a route
 y_jr = mdl.binary_var_dict(((j, r) for j in V for r in R), name='y_jr')  # is the supplier assigned !!! to route?
 z_jkr = mdl.binary_var_dict(((j, k, r) for j, k in A for r in R), name='z_jkr')  # is arc (j, k) visited !!! by route r?
