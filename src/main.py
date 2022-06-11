@@ -38,14 +38,12 @@ df_routes = pd.read_csv("data/routes.txt")
 #         df_nodes.iloc[row, 0] = random.uniform(0, 500)
 #         df_nodes.iloc[row, 1] = random.uniform(0, 500)
 #         df_nodes.iloc[row, 2] = 0
-#         df_nodes.iloc[row, 3] = 0
 #     else:
 #         df_nodes.iloc[row, 0] = random.uniform(0, 500)
 #         df_nodes.iloc[row, 1] = random.uniform(0, 500)
-#         df_nodes.iloc[row, 2] = int(random.uniform(1, 9))
-#         df_nodes.iloc[row, 3] = int(random.uniform(600, 1200))
+#         df_nodes.iloc[row, 2] = round(random.uniform(0.3, 0.5), 1)
 # df_nodes.to_csv('data/nodes_permutated.txt', index=False)
-# TODO: nodes.txt unloading times per box should be approximately 20 seconds and make it in minutes
+
 
 
 Q = 10  # vehicle capacity in boxes
@@ -143,9 +141,9 @@ z_jkr = mdl.binary_var_dict(((j, k, r) for j, k in A for r in R), name='z_jkr') 
 u_rs = mdl.binary_var_dict(((r, s) for r in R for s in F), name='u_rs')  # is frequency of route r s? Lukas: because of that I think its easier when F is just a list going from 1 to the largest possible visting frequency for any supplier
 D_rs = mdl.continuous_var_dict(((r, s) for r in R for s in F), name='D_rs')  # the departure time of the sth visit from the manufacturer for route r Lukas: Frequency again
 A_rs = mdl.continuous_var_dict(((r, s) for r in R for s in F), name='A_rs')  # the arrival time of the sth visit from the manufacturer for route r
-sigma_jrs = mdl.binary_var_dict(((j, r, s) for j in V for r in R for s in F), name='sigma_jrs')  # is equal to 1 if y_jr = 1, u_rs = 1 and 0 otherwise. Wrong parameter possibly
-delta_jkrs = mdl.binary_var_dict(((j, k, r, s) for j, k in A for r in R for s in F), name='delta_jkrs')  # is equal to 1 if z_jkr = 1, u_rs = 1 and 0 otherwise. Wrong parameter possibly
-epsilon_jrstp = mdl.binary_var_dict(((j, r, s, t, p) for j in V for r in R for s in F for t in F for p in P), name='epsilon_jrstp')  # is equal to 1 if delta_jrs = 1 and t-th visit of route r meet the demand needed from supplier j on P-LANE p and 0 otherwise. Wrong parameter possibly
+sigma_jrs = mdl.binary_var_dict(((j, r, s) for j in V for r in R for s in F), name='sigma_jrs')  # is equal to 1 if y_jr = 1, u_rs = 1 and 0 otherwise
+delta_jkrs = mdl.binary_var_dict(((j, k, r, s) for j, k in A for r in R for s in F), name='delta_jkrs')  # is equal to 1 if z_jkr = 1, u_rs = 1 and 0 otherwise
+epsilon_jrstp = mdl.binary_var_dict(((j, r, s, t, p) for j in V for r in R for s in F for t in F for p in P), name='epsilon_jrstp')  # is equal to 1 if delta_jrs = 1 and t-th visit of route r meet the demand needed from supplier j on P-LANE p and 0 otherwise
 F_jp = mdl.continuous_var_dict(((j, p) for j in V for p in P), name='F_jp')  # is the finish time when the parts collected from supplier j meet the demand on P-LANE p
 E_jp = mdl.continuous_var_dict(((j, p) for j in V for p in P), name='E_jp')  # is the earliness of supplier j on P-LANE p
 T_jp = mdl.continuous_var_dict(((j, p) for j in V for p in P), name='T_jp')  # is the tardiness time of supplier j on P-LANE p
