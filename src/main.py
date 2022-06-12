@@ -63,7 +63,7 @@ loc_y = df_nodes["Lat"].to_list()
 # plt.show()
 
 A = [(i, j) for i in V for j in V if i != j]  # (0,1), (0,2) and so on - set of arcs
-c_jk = {(i, j): np.hypot(loc_x[i]-loc_x[j], loc_y[i]-loc_y[j]) for i, j in A}  # set of costs between arcs - distances
+c = {(i, j): np.hypot(loc_x[i]-loc_x[j], loc_y[i]-loc_y[j]) for i, j in A}  # set of costs between arcs - distances
 
 # ADDITIONS (differ from the youtube vid)
 
@@ -87,7 +87,7 @@ for j in N:
     b_j[j] = sum_b_j
 
 random.seed(0)
-d_p = {p: int(random.uniform(6, 24)) * 60 for p in P}  # the due date of P-LANE p (in minutes)
+d = {p: int(random.uniform(6, 24)) * 60 for p in P}  # the due date of P-LANE p (in minutes)
 # TODO: make it actual times and part of dataset and not randomly generated. Issue - we don't have a dataset for P-LANEs
 
 f = 5  # transportation cost per unit distance
@@ -95,9 +95,9 @@ theta = 5  # earliness cost
 psi = 5  # tardiness cost
 omega = 5  # fixed cost per vehicle per visit
 
-u_j = {}  # unloading time per box for the parts collected from supplier j (in seconds)
+u = {}  # unloading time per box for the parts collected from supplier j (in seconds)
 for row, content in df_nodes.iloc[1:].iterrows():
-    u_j[row] = content[2]
+    u[row] = content[2]
 
 # F = {}  # set of visiting frequencies (old way)
 # for j in b_j:
@@ -106,10 +106,10 @@ for row, content in df_nodes.iloc[1:].iterrows():
 F = []
 F.extend(list(range(1, math.ceil(b_j[j] / Q) + 1)))  # all visiting frequencies (old version)
 
-nu_js = {}  # the average number of boxes collected from supplier j per each visit if supplier j is visited s times
+nu = {}  # the average number of boxes collected from supplier j per each visit if supplier j is visited s times
 for j in range(1, len(b_j) + 1):
     for s in F:
-        nu_js[(j, s)] = b_j[j]/s  # !!! TODO: number of decimals?
+        nu[(j, s)] = b_j[j]/s  # !!! TODO: number of decimals?
 
 '''
 Summary before the constraints and variables:
@@ -117,50 +117,51 @@ Q         vehicle capacity in boxes
 N         set of nodes without the depot (set of suppliers)
 V         set of nodes with the depot (vertex set)
 A         set of arcs (arc set)
-c_jk      set of costs (distances) between arcs
+c         set of costs (distances) between arcs
 R         set of routes
 P         set of P-LANEs
 b_jp      number of boxes needed from supplier j ∈ V\{0} on P-LANE p ∈ P (from supplier j ∈ N)
-b_j       total number of boxes needed from supplier j in manufacturer’s one-day production
-d_p       the due date of P-LANE p. Time interval from 0 to 12 (check the related todo!)
+b_j       total number of boxes needed from supplier j in manufacturer’s one-day production 
+d         the due date of P-LANE p. Time interval from 0 to 12 (check the related todo!)
 f         transportation cost per unit distance
 theta     earliness cost
 psi       tardiness cost
 omega     fixed cost per vehicle per visit
-u_j       unloading time per box for the parts collected from supplier j (in seconds))
+u         unloading time per box for the parts collected from supplier j (in seconds))
 F         set of visiting frequencies
-nu_js     the average number of boxes collected from supplier j per each visit if supplier j is visited s times
+nu        the average number of boxes collected from supplier j per each visit if supplier j is visited s times
 '''
+# TODO: note that we can't use just b because there are b_jp and b_j
 
 mdl = Model('CVRP')
 
 # VARIABLES
-x_r = mdl.binary_var_dict(R, name='x_r')  # do we select a route
-y_jr = mdl.binary_var_dict(((j, r) for j in V for r in R), name='y_jr')  # is the supplier assigned !!! to route?
-z_jkr = mdl.binary_var_dict(((j, k, r) for j, k in A for r in R), name='z_jkr')  # is arc (j, k) visited !!! by route r?
-u_rs = mdl.binary_var_dict(((r, s) for r in R for s in F), name='u_rs')  # is frequency of route r s? Lukas: because of that I think its easier when F is just a list going from 1 to the largest possible visting frequency for any supplier
-D_rs = mdl.continuous_var_dict(((r, s) for r in R for s in F), name='D_rs')  # the departure time of the sth visit from the manufacturer for route r Lukas: Frequency again
-A_rs = mdl.continuous_var_dict(((r, s) for r in R for s in F), name='A_rs')  # the arrival time of the sth visit from the manufacturer for route r
-sigma_jrs = mdl.binary_var_dict(((j, r, s) for j in V for r in R for s in F), name='sigma_jrs')  # is equal to 1 if y_jr = 1, u_rs = 1 and 0 otherwise
-delta_jkrs = mdl.binary_var_dict(((j, k, r, s) for j, k in A for r in R for s in F), name='delta_jkrs')  # is equal to 1 if z_jkr = 1, u_rs = 1 and 0 otherwise
-epsilon_jrstp = mdl.binary_var_dict(((j, r, s, t, p) for j in V for r in R for s in F for t in F for p in P), name='epsilon_jrstp')  # is equal to 1 if delta_jrs = 1 and t-th visit of route r meet the demand needed from supplier j on P-LANE p and 0 otherwise
-F_jp = mdl.continuous_var_dict(((j, p) for j in V for p in P), name='F_jp')  # is the finish time when the parts collected from supplier j meet the demand on P-LANE p
-E_jp = mdl.continuous_var_dict(((j, p) for j in V for p in P), name='E_jp')  # is the earliness of supplier j on P-LANE p
-T_jp = mdl.continuous_var_dict(((j, p) for j in V for p in P), name='T_jp')  # is the tardiness time of supplier j on P-LANE p
+x = mdl.binary_var_dict(R, name='x')  # do we select a route
+y = mdl.binary_var_dict(((j, r) for j in V for r in R), name='y')  # is the supplier assigned !!! to route?
+z = mdl.binary_var_dict(((j, k, r) for j, k in A for r in R), name='z')  # is arc (j, k) visited !!! by route r?
+u = mdl.binary_var_dict(((r, s) for r in R for s in F), name='u')  # is frequency of route r s? Lukas: because of that I think its easier when F is just a list going from 1 to the largest possible visting frequency for any supplier
+D = mdl.continuous_var_dict(((r, s) for r in R for s in F), name='D')  # the departure time of the sth visit from the manufacturer for route r Lukas: Frequency again
+A_rs = mdl.continuous_var_dict(((r, s) for r in R for s in F), name='A_rs')  # the arrival time of the sth visit from the manufacturer for route r TODO: note that we can't use just A because A is reserved for arc set
+sigma = mdl.binary_var_dict(((j, r, s) for j in V for r in R for s in F), name='sigma')  # is equal to 1 if y_jr = 1, u_rs = 1 and 0 otherwise
+delta = mdl.binary_var_dict(((j, k, r, s) for j, k in A for r in R for s in F), name='delta')  # is equal to 1 if z_jkr = 1, u_rs = 1 and 0 otherwise
+epsilon = mdl.binary_var_dict(((j, r, s, t, p) for j in V for r in R for s in F for t in F for p in P), name='epsilon_jrstp')  # is equal to 1 if delta_jrs = 1 and t-th visit of route r meet the demand needed from supplier j on P-LANE p and 0 otherwise
+F_jp = mdl.continuous_var_dict(((j, p) for j in V for p in P), name='F_jp')  # is the finish time when the parts collected from supplier j meet the demand on P-LANE p TODO: note that we can't use just F because F is reserved for set of frequencies
+E = mdl.continuous_var_dict(((j, p) for j in V for p in P), name='E')  # is the earliness of supplier j on P-LANE p
+T = mdl.continuous_var_dict(((j, p) for j in V for p in P), name='T')  # is the tardiness time of supplier j on P-LANE p
 M = 10e10  # sufficiently big number Lukas: might be a little bit too big, reducing it would be benefical for solving time, issue of parameter tuning
 
 # OBJECTIVE
-mdl.minimize(mdl.sum(f * s * c_jk[j, k] * delta_jkrs[j, k, r, s] for j, k in A for r in R for s in F) +  # !!! KeyError: (1, 1) if removing indexes from variable's names
-             mdl.sum(omega * s * u_rs[r, s] for r in R for s in F) +
-             mdl.sum(theta * E_jp[j, p] for j in N for p in P) +
-             mdl.sum(psi * T_jp[j, p] for j in N for p in P))
+mdl.minimize(mdl.sum(f * s * c[j, k] * delta[j, k, r, s] for j, k in A for r in R for s in F) +
+             mdl.sum(omega * s * u[r, s] for r in R for s in F) +
+             mdl.sum(theta * E[j, p] for j in N for p in P) +
+             mdl.sum(psi * T[j, p] for j in N for p in P))
 
 # CONSTRAINTS
-mdl.add_constraints(x_r[r + 1] <= x_r[r] for r in range(1, len(R)-1))  # 1b
-mdl.add_constraints(mdl.sum(y_jr[j, r] for j in N) == 1 for r in R)  # 1c !!! the sequence should be correct
-mdl.add_constraints(mdl.sum(y_jr[j, r] for j in N) >= x_r[r] for r in R)  # 1d
-mdl.add_constraints(mdl.sum(z_jkr[j, k, r] for k in V if k != j) == y_jr[j, r] for j in N for r in R)  # 1e TODO: just to clarify - (1, 1, 1), (1, 1, 2), etc. shouldn't exist right? (if k != j)
-mdl.add_constraints(mdl.sum(z_jkr[j, k, r] for j in V if j != k) == y_jr[k, r] for k in N for r in R)  # 1f
+mdl.add_constraints(x[r + 1] <= x[r] for r in range(1, len(R)-1))  # 1b
+mdl.add_constraints(mdl.sum(y[j, r] for j in N) == 1 for r in R)  # 1c !!! the sequence should be correct
+mdl.add_constraints(mdl.sum(y[j, r] for j in N) >= x[r] for r in R)  # 1d
+mdl.add_constraints(mdl.sum(z[j, k, r] for k in V if k != j) == y[j, r] for j in N for r in R)  # 1e
+mdl.add_constraints(mdl.sum(z[j, k, r] for j in V if j != k) == y[k, r] for k in N for r in R)  # 1f
 
 # EVERYTHING NEXT HASN'T BEEN DONE YET
 mdl.parameters.timelimit = 15
