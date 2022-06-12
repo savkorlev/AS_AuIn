@@ -40,6 +40,8 @@ mdl.add_constraints(mdl.sum(x[i, j] for i in V if i != j) == 1 for j in N)
 mdl.add_indicator_constraints(mdl.indicator_constraint(x[i, j], u[i]+q[j] == u[j]) for i, j in A if i != 0 and j != 0)
 mdl.add_constraints(u[i] >= q[i] for i in N)
 mdl.parameters.timelimit = 15
+
+# SOLUTION
 solution = mdl.solve(log_output=True)
 print(solution)
 solution.solve_status

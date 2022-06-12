@@ -150,18 +150,19 @@ T_jp = mdl.continuous_var_dict(((j, p) for j in V for p in P), name='T_jp')  # i
 M = 10e10  # sufficiently big number Lukas: might be a little bit too big, reducing it would be benefical for solving time, issue of parameter tuning
 
 # OBJECTIVE
-mdl.minimize(mdl.sum(f * s * c_jk[j, k] * delta_jkrs[j, k, r, s] for j, k in A for r in R for s in F) +
+mdl.minimize(mdl.sum(f * s * c_jk[j, k] * delta_jkrs[j, k, r, s] for j, k in A for r in R for s in F) +  # !!! KeyError: (1, 1) if removing indexes from variable's names
              mdl.sum(omega * s * u_rs[r, s] for r in R for s in F) +
              mdl.sum(theta * E_jp[j, p] for j in N for p in P) +
              mdl.sum(psi * T_jp[j, p] for j in N for p in P))
 
-# EVERYTHING NEXT HASN'T BEEN DONE YET
 # CONSTRAINTS
-mdl.add_constraints(mdl.sum(x[i, j] for j in V if j != i) == 1 for i in N)
-mdl.add_constraints(mdl.sum(x[i, j] for i in V if i != j) == 1 for j in N)
-mdl.add_indicator_constraints(mdl.indicator_constraint(x[i, j], u[i]+q[j] == u[j]) for i, j in A if i != 0 and j != 0)
-mdl.add_constraints(u[i] >= q[i] for i in N)
+mdl.add_constraints(x_r[r + 1] <= x_r[r] for r in range(1, len(R)-1))  # 1b
+mdl.add_constraints(mdl.sum(y_jr[j, r] for j in N) == 1 for r in R)  # 1c !!! the sequence should be correct
+mdl.add_constraints(mdl.sum(y_jr[j, r] for j in N) >= x_r[r] for r in R)  # 1d
+mdl.add_constraints(mdl.sum(z_jkr[j, k, r] for k in V if k != j) == y_jr[j, r] for j in N for r in R)  # 1e TODO: just to clarify - (1, 1, 1), (1, 1, 2), etc. shouldn't exist right? (if k != j)
+mdl.add_constraints(mdl.sum(z_jkr[j, k, r] for j in V if j != k) == y_jr[k, r] for k in N for r in R)  # 1f
 
+# EVERYTHING NEXT HASN'T BEEN DONE YET
 mdl.parameters.timelimit = 15
 
 # SOLVE AND PRINT
