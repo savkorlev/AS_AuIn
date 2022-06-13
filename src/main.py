@@ -171,14 +171,14 @@ mdl.add_constraints(2 * delta[j, k, r, s] <= z[j, k, r] + u[r, s] for j in V for
 # about the constraint 1k TypeError: cannot unpack non-iterable int object. Reason: for j, k in V -> for j in V for k in V
 #  also KeyError: (0, 0, 1, 1) -> means the pair 0, 0 should not exist (distance between the same node) -> if j != k
 mdl.add_constraints(1 + delta[j, k, r, s] >= z[j, k, r] + u[r, s] for j in V for k in V if k != j for r in R for s in F)  # 1l
-mdl.add_constraints(2 * sigma[j, r, s] <= y[j, r] + u[r, s] for j in N for r in R for s in F)  # 1m TODO: is k in sigma indexes a mistake in a paper?
+mdl.add_constraints(2 * sigma[j, r, s] <= y[j, r] + u[r, s] for j in N for r in R for s in F)  # 1m TODO: is k in sigma indexes a mistake in a paper? -> yes, the same for sigma in 1n
 mdl.add_constraints(1 + sigma[j, r, s] >= y[j, r] + u[r, s] for j in N for r in R for s in F)  # 1n
-mdl.add_constraints(mdl.sum(t * nu[j, s] * epsilon[j, r, s, t, p] for t in range(1, s + 1)) >= mdl.sum(b_jp[j, k] * sigma[j, r, s] for k in range(1, p + 1)) for j in N for r in R for s in F for p in P)  # 1o TODO: not sure if that's a correct implementation of sum from 1 to s. Plus is b_jk correct and not a mistake in a paper?
+mdl.add_constraints(mdl.sum(t * nu[j, s] * epsilon[j, r, s, t, p] for t in range(1, s + 1)) >= mdl.sum(b_jp[j, k] * sigma[j, r, s] for k in range(1, p + 1)) for j in N for r in R for s in F for p in P)  # 1o TODO: not sure if that's a correct implementation of sum from 1 to s. Plus is b_jk correct and not a mistake in a paper? -> looks good to me, b_jk is correct as stated in the paper (and the implementation)
 mdl.add_constraints(mdl.sum(((t - 1) * nu[j, s] + 1) * epsilon[j, r, s, t, p] for t in range(1, s + 1)) <= mdl.sum(b_jp[j, k] * sigma[j, r, s] for k in range(1, p + 1)) for j in N for r in R for s in F for p in P)  # 1p
-mdl.add_constraints(mdl.sum(epsilon[j, r, s, t, p] for t in range(1, s + 1)) == sigma[j, r, s] for j in N for r in R for s in F for p in P)  # 1q TODO: what is the set L? Should be F?
-mdl.add_constraints(A_rs[r, s] >= D[r, s] + mdl.sum(c[j, k] * z[j, k, r] for k in V for j in V if j != k) + mdl.sum(U[j] * nu[j, t] * sigma[j, r, t] for t in F for j in N) - M * mdl.sum(u[r, t] for t in range(1, s + 1)) for r in R for s in F)  # 1r TODO: KeyError: (1, 0). Reason: why u[r, t] can be [1, 0] according to the model? Should sum be from t = 1 to s? range(s) -> range(1, s + 1)
-# TODO: 1s
-# TODO: 1t
+mdl.add_constraints(mdl.sum(epsilon[j, r, s, t, p] for t in range(1, s + 1)) == sigma[j, r, s] for j in N for r in R for s in F for p in P)  # 1q TODO: what is the set L? Should be F? -> yes should be F
+mdl.add_constraints(A_rs[r, s] >= D[r, s] + mdl.sum(c[j, k] * z[j, k, r] for k in V for j in V if j != k) + mdl.sum(U[j] * nu[j, t] * sigma[j, r, t] for t in F for j in N) - M * mdl.sum(u[r, t] for t in range(1, s + 1)) for r in R for s in F)  # 1r TODO: KeyError: (1, 0). Reason: why u[r, t] can be [1, 0] according to the model? Should sum be from t = 1 to s? range(s) -> range(1, s + 1) -> I think the t=0 is a mistake, but going only until s-1 is correct, otherwise the Big-M formulation would also not work properly -> range(1, s) should be correct
+# TODO: 1s can be implemented by changing C_rt to A_rs
+# TODO: 1t can be implemented by changing C_rt to A_rs
 mdl.add_constraints(E[j, p] >= d[p] - F_jp[j, p] for j in N for p in P)  # 1u
 mdl.add_constraints(T[j, p] >= F_jp[j, p] - d[p] for j in N for p in P)  # 1u
 
