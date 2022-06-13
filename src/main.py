@@ -132,6 +132,7 @@ F         set of visiting frequencies
 nu        the average number of boxes collected from supplier j per each visit if supplier j is visited s times
 '''
 # TODO: note that we can't use just b because there are b_jp and b_j
+# TODO: possible issue - p, j, s, etc. are already formally defined above in for loops
 
 mdl = Model('CVRP')
 
@@ -162,6 +163,20 @@ mdl.add_constraints(mdl.sum(y[j, r] for j in N) == 1 for r in R)  # 1c !!! the s
 mdl.add_constraints(mdl.sum(y[j, r] for j in N) >= x[r] for r in R)  # 1d
 mdl.add_constraints(mdl.sum(z[j, k, r] for k in V if k != j) == y[j, r] for j in N for r in R)  # 1e
 mdl.add_constraints(mdl.sum(z[j, k, r] for j in V if j != k) == y[k, r] for k in N for r in R)  # 1f
+mdl.add_constraints(mdl.sum(u[r, s] for s in F) == x[r] for r in R)  # 1h
+mdl.add_constraints(mdl.sum(b_j[j] * y[j, r] for j in N) <= mdl.sum(s * Q * u[r, s] for s in F) for r in R)  # 1i
+mdl.add_constraints(mdl.sum(b_j[j] * y[j, r] for j in N) >= mdl.sum(((s - 1) * Q + 1) * u[r, s] for s in F) for r in R)  # 1j
+mdl.add_constraints(2 * delta[j, k, r, s] <= z[j, k, r] + u[r, s] for j in V for k in V if k != j for r in R for s in F)  # 1k
+# about the constraint 1k TypeError: cannot unpack non-iterable int object. Reason: for j, k in V -> for j in V for k in V
+#  also KeyError: (0, 0, 1, 1) -> means the pair 0, 0 should not exist (distance between the same node) -> if j != k
+mdl.add_constraints(1 + delta[j, k, r, s] >= z[j, k, r] + u[r, s] for j in V for k in V if k != j for r in R for s in F)  # 1l
+mdl.add_constraints(2 * sigma[j, r, s] <= y[j, r] + u[r, s] for j in N for r in R for s in F)  # 1m TODO: is k in sigma indexes a mistake in a paper?
+mdl.add_constraints(1 + sigma[j, r, s] >= y[j, r] + u[r, s] for j in N for r in R for s in F)  # 1n
+mdl.add_constraints(mdl.sum(t * nu[j, s] * epsilon[j, r, s, t, p] for t in range(1, s + 1)) >= mdl.sum(b_jp[j, k] * sigma[j, r, s] for k in range(1, p + 1)) for j in N for r in R for s in F for p in P)  # 1o TODO: regarding 1o - not sure if that's a correct implementation of sum from 1 to s. Plus is b_jk correct and not a mistake in a paper?
+mdl.add_constraints(mdl.sum(((t - 1) * nu[j, s] + 1) * epsilon[j, r, s, t, p] for t in range(1, s + 1)) <= mdl.sum(b_jp[j, k] * sigma[j, r, s] for k in range(1, p + 1)) for j in N for r in R for s in F for p in P)  # 1p
+mdl.add_constraints(mdl.sum(epsilon[j, r, s, t, p] for t in range(1, s + 1)) == sigma[j, r, s] for j in N for r in R for s in F for p in P)  # 1q TODO: what is the set L? Should be F?
+mdl.add_constraints(A_rs[r, s] >= D[r, s] + mdl.sum(c[j, k] * z[j, k, r] for k in V for j in V))  # 1r
+
 
 # EVERYTHING NEXT HASN'T BEEN DONE YET
 mdl.parameters.timelimit = 15
