@@ -90,7 +90,7 @@ random.seed(0)
 d = {p: int(random.uniform(6, 24)) * 60 for p in P}  # the due date of P-LANE p (in minutes)
 # TODO: make it actual times and part of dataset and not randomly generated. Issue - we don't have a dataset for P-LANEs
 
-f = 5  # transportation cost per unit distance
+phi = 5  # transportation cost per unit distance
 theta = 5  # earliness cost
 psi = 5  # tardiness cost
 omega = 5  # fixed cost per vehicle per visit
@@ -123,7 +123,7 @@ P         set of P-LANEs
 b_jp      number of boxes needed from supplier j ∈ V\{0} on P-LANE p ∈ P (from supplier j ∈ N)
 b_j       total number of boxes needed from supplier j in manufacturer’s one-day production 
 d         the due date of P-LANE p. Time interval from 0 to 12 (check the related todo!)
-f         transportation cost per unit distance
+phi       transportation cost per unit distance
 theta     earliness cost
 psi       tardiness cost
 omega     fixed cost per vehicle per visit
@@ -131,86 +131,108 @@ U         unloading time per box for the parts collected from supplier j (in sec
 F         set of visiting frequencies
 nu        the average number of boxes collected from supplier j per each visit if supplier j is visited s times
 '''
-# Note that we can't use just b because there are b_jp and b_j (same later on for A, F
+# Note that we can't use just b because there are b_jp and b_j (same later on for A, F)
 # TODO: possible issue - p, j, s, etc. are already formally defined above in for loops
 
 mdl = Model('CVRP')
 
 # VARIABLES
 x = mdl.binary_var_dict(R, name='x')  # do we select a route
-y = mdl.binary_var_dict(((j, r) for j in V for r in R), name='y')  # is the supplier assigned !!! to route? TODO: shouldn't be for j in N?
+y = mdl.binary_var_dict(((j, r) for j in N for r in R), name='y')  # is the supplier assigned !!! to route? TODO: is "for j in N" correct or should it be V? Same applies for sigma, epsilon, F_jp, E and T
 z = mdl.binary_var_dict(((j, k, r) for j, k in A for r in R), name='z')  # is arc (j, k) visited !!! by route r?
 u = mdl.binary_var_dict(((r, s) for r in R for s in F), name='u')  # is frequency of route r s? Lukas: because of that I think its easier when F is just a list going from 1 to the largest possible visting frequency for any supplier
-D = mdl.continuous_var_dict(((r, s) for r in R for s in F), name='D')  # the departure time of the sth visit from the manufacturer for route r Lukas: Frequency again
+D = mdl.continuous_var_dict(((r, s) for r in R for s in F), name='D')  # the departure time of the sth visit from the manufacturer for route r Lukas: Frequency again. TODO: is "of the sth visit" the same as frequency?
 A_rs = mdl.continuous_var_dict(((r, s) for r in R for s in F), name='A_rs')  # the arrival time of the sth visit from the manufacturer for route r. Note that we can't use just A because A is reserved for arc set
-sigma = mdl.binary_var_dict(((j, r, s) for j in V for r in R for s in F), name='sigma')  # is equal to 1 if y_jr = 1, u_rs = 1 and 0 otherwise
+sigma = mdl.binary_var_dict(((j, r, s) for j in N for r in R for s in F), name='sigma')  # is equal to 1 if y_jr = 1, u_rs = 1 and 0 otherwise
 delta = mdl.binary_var_dict(((j, k, r, s) for j, k in A for r in R for s in F), name='delta')  # is equal to 1 if z_jkr = 1, u_rs = 1 and 0 otherwise
-epsilon = mdl.binary_var_dict(((j, r, s, t, p) for j in V for r in R for s in F for t in F for p in P), name='epsilon_jrstp')  # is equal to 1 if delta_jrs = 1 and t-th visit of route r meet the demand needed from supplier j on P-LANE p and 0 otherwise
-F_jp = mdl.continuous_var_dict(((j, p) for j in V for p in P), name='F_jp')  # is the finish time when the parts collected from supplier j meet the demand on P-LANE p. Note that we can't use just F because F is reserved for set of frequencies
-E = mdl.continuous_var_dict(((j, p) for j in V for p in P), name='E')  # is the earliness of supplier j on P-LANE p
-T = mdl.continuous_var_dict(((j, p) for j in V for p in P), name='T')  # is the tardiness time of supplier j on P-LANE p
+epsilon = mdl.binary_var_dict(((j, r, s, t, p) for j in N for r in R for s in F for t in F for p in P), name='epsilon_jrstp')  # is equal to 1 if delta_jrs = 1 and t-th visit of route r meet the demand needed from supplier j on P-LANE p and 0 otherwise
+F_jp = mdl.continuous_var_dict(((j, p) for j in N for p in P), name='F_jp')  # is the finish time when the parts collected from supplier j meet the demand on P-LANE p. Note that we can't use just F because F is reserved for set of frequencies
+E = mdl.continuous_var_dict(((j, p) for j in N for p in P), name='E')  # is the earliness of supplier j on P-LANE p
+T = mdl.continuous_var_dict(((j, p) for j in N for p in P), name='T')  # is the tardiness time of supplier j on P-LANE p
 M = 10e10  # sufficiently big number Lukas: might be a little bit too big, reducing it would be benefical for solving time, issue of parameter tuning
 # OBJECTIVE
-mdl.minimize(mdl.sum(f * s * c[j, k] * delta[j, k, r, s] for j in V for k in V if j != k for r in R for s in F) +
+mdl.minimize(mdl.sum(phi * s * c[j, k] * delta[j, k, r, s] for j in V for k in V if j != k for r in R for s in F) +
              mdl.sum(omega * s * u[r, s] for r in R for s in F) +
              mdl.sum(theta * E[j, p] for j in N for p in P) +
              mdl.sum(psi * T[j, p] for j in N for p in P))
 
 # CONSTRAINTS
 # sigma, delta and epsilon constraints
-mdl.add_indicator_constraints(mdl.indicator_constraint(y[j, r] and u[r, s], sigma[j, r, s] == 1) for j in V for r in R for s in F)  # TODO not sure if it is working correctly
-mdl.add_indicator_constraints(mdl.indicator_constraint(z[j, k, r] and u[r, s], delta[j, k, r, s] == 1) for j, k in A for r in R for s in F)  # same as above
+# mdl.add_indicator_constraints(mdl.indicator_constraint(y[j, r] and u[r, s], sigma[j, r, s] == 1) for j in V for r in R for s in F)  # TODO not sure if it is working correctly
+# mdl.add_indicator_constraints(mdl.indicator_constraint(z[j, k, r] and u[r, s], delta[j, k, r, s] == 1) for j, k in A for r in R for s in F)  # same as above
 # mdl.add_indicator_constraints(mdl.indicator_constraint(epsilon[j, r, s, t, p], delta[j, r, s])  # TODO
 
 # 1b
 mdl.add_constraints(x[r + 1] <= x[r] for r in range(1, len(R)-1))
+
 # 1c
-mdl.add_constraints(mdl.sum(y[j, r] for j in N) == 1 for r in R)
+mdl.add_constraints(mdl.sum(y[j, r] for r in R) == 1 for j in N)
+
 # 1d
 mdl.add_constraints(mdl.sum(y[j, r] for j in N) >= x[r] for r in R)
+
 # 1e
 mdl.add_constraints(mdl.sum(z[j, k, r] for k in V if k != j) == y[j, r] for j in N for r in R)
+# if k != j because the distance between the same arcs doesn't exist (KeyError)
+
 # 1f
 mdl.add_constraints(mdl.sum(z[j, k, r] for j in V if j != k) == y[k, r] for k in N for r in R)
+# if j != k because the distance between the same arcs doesn't exist (KeyError)
+
 # TODO: 1g
+
 # 1h
 mdl.add_constraints(mdl.sum(u[r, s] for s in F) == x[r] for r in R)
+
 # 1i
 mdl.add_constraints(mdl.sum(b_j[j] * y[j, r] for j in N) <= mdl.sum(s * Q * u[r, s] for s in F) for r in R)
+
 # 1j
 mdl.add_constraints(mdl.sum(b_j[j] * y[j, r] for j in N) >= mdl.sum(((s - 1) * Q + 1) * u[r, s] for s in F) for r in R)
+
 # 1k
 mdl.add_constraints(2 * delta[j, k, r, s] <= z[j, k, r] + u[r, s] for j in V for k in V if k != j for r in R for s in F)
 # TypeError: cannot unpack non-iterable int object. Reason: for j, k in V -> for j in V for k in V
-# also KeyError: (0, 0, 1, 1) -> means the pair 0, 0 should not exist (distance between the same node) -> if j != k
+# if k != j because the distance between the same arcs doesn't exist (KeyError)
+
 # 1l
 mdl.add_constraints(1 + delta[j, k, r, s] >= z[j, k, r] + u[r, s] for j in V for k in V if k != j for r in R for s in F)
+
 # 1m
 mdl.add_constraints(2 * sigma[j, r, s] <= y[j, r] + u[r, s] for j in N for r in R for s in F)
 # Q: is k in sigma indexes a mistake in a paper? A: yes, the same for sigma in 1n
+
 # 1n
 mdl.add_constraints(1 + sigma[j, r, s] >= y[j, r] + u[r, s] for j in N for r in R for s in F)
+
 # 1o
 mdl.add_constraints(mdl.sum(t * nu[j, s] * epsilon[j, r, s, t, p] for t in range(1, s + 1)) >= mdl.sum(b_jp[j, k] * sigma[j, r, s] for k in range(1, p + 1)) for j in N for r in R for s in F for p in P)
 # Q: not sure if that's a correct implementation of sum from 1 to s. A: looks good to me
 # Q: plus is b_jk correct and not a mistake in a paper? A: b_jk is correct as stated in the paper (and the implementation)
+
 # 1p
 mdl.add_constraints(mdl.sum(((t - 1) * nu[j, s] + 1) * epsilon[j, r, s, t, p] for t in range(1, s + 1)) <= mdl.sum(b_jp[j, k] * sigma[j, r, s] for k in range(1, p + 1)) for j in N for r in R for s in F for p in P)
+
 # 1q
 mdl.add_constraints(mdl.sum(epsilon[j, r, s, t, p] for t in range(1, s + 1)) == sigma[j, r, s] for j in N for r in R for s in F for p in P)
 # Q: what is the set L? Should be F? A: yes should be F
+
 # 1r
 mdl.add_constraints(A_rs[r, s] >= D[r, s] + mdl.sum(c[j, k] * z[j, k, r] for j in V for k in V if k != j) + mdl.sum(U[j] * nu[j, t] * sigma[j, r, t] for j in N for t in F) - M * mdl.sum(u[r, t] for t in range(1, s)) for r in R for s in F)
 # Q: KeyError: (1, 0). Reason: why u[r, t] can be [1, 0] according to the model? Should sum be from t = 1 to s? range(s) -> range(1, s + 1)
-# A: I think the t=0 is a mistake, but going only until s-1 is correct, otherwise the Big-M formulation would also not work properly -> range(1, s) should be correct
+# A: I think the t=0 is a mistake, but going only until s-1 is correct, otherwise the Big-M formulation would also not work properly -> range(1, s) should be correct TODO: why?
+
 # 1s
 mdl.add_constraints(F_jp[j, p] >= A_rs[r, s] + M * (epsilon[j, r, s, t, p] - 1) for j in N for r in R for s in F for p in P for t in F)
 # implemented by changing C_rt to A_rs
+
 # 1t
 mdl.add_constraints(F_jp[j, p] <= A_rs[r, s] + M * (1 - epsilon[j, r, s, t, p]) for j in N for r in R for s in F for p in P for t in F)
 # implemented by changing C_rt to A_rs
+
 # 1u
 mdl.add_constraints(E[j, p] >= d[p] - F_jp[j, p] for j in N for p in P)
+
 # 1v
 mdl.add_constraints(T[j, p] >= F_jp[j, p] - d[p] for j in N for p in P)
 # TODO: check the parameters with double sum
