@@ -138,7 +138,7 @@ mdl = Model('CVRP')
 
 # VARIABLES
 x = mdl.binary_var_dict(R, name='x')  # do we select a route
-y = mdl.binary_var_dict(((j, r) for j in V for r in R), name='y')  # is the supplier assigned !!! to route?
+y = mdl.binary_var_dict(((j, r) for j in V for r in R), name='y')  # is the supplier assigned !!! to route? TODO: shouldn't be for j in N?
 z = mdl.binary_var_dict(((j, k, r) for j, k in A for r in R), name='z')  # is arc (j, k) visited !!! by route r?
 u = mdl.binary_var_dict(((r, s) for r in R for s in F), name='u')  # is frequency of route r s? Lukas: because of that I think its easier when F is just a list going from 1 to the largest possible visting frequency for any supplier
 D = mdl.continuous_var_dict(((r, s) for r in R for s in F), name='D')  # the departure time of the sth visit from the manufacturer for route r Lukas: Frequency again
@@ -150,56 +150,76 @@ F_jp = mdl.continuous_var_dict(((j, p) for j in V for p in P), name='F_jp')  # i
 E = mdl.continuous_var_dict(((j, p) for j in V for p in P), name='E')  # is the earliness of supplier j on P-LANE p
 T = mdl.continuous_var_dict(((j, p) for j in V for p in P), name='T')  # is the tardiness time of supplier j on P-LANE p
 M = 10e10  # sufficiently big number Lukas: might be a little bit too big, reducing it would be benefical for solving time, issue of parameter tuning
-
 # OBJECTIVE
-mdl.minimize(mdl.sum(f * s * c[j, k] * delta[j, k, r, s] for s in F for r in R for k in V for j in V if j != k) +
-             mdl.sum(omega * s * u[r, s] for s in F for r in R) +
-             mdl.sum(theta * E[j, p] for p in P for j in N) +
-             mdl.sum(psi * T[j, p] for p in P for j in N))
+mdl.minimize(mdl.sum(f * s * c[j, k] * delta[j, k, r, s] for j in V for k in V if j != k for r in R for s in F) +
+             mdl.sum(omega * s * u[r, s] for r in R for s in F) +
+             mdl.sum(theta * E[j, p] for j in N for p in P) +
+             mdl.sum(psi * T[j, p] for j in N for p in P))
 
 # CONSTRAINTS
-mdl.add_constraints(x[r + 1] <= x[r] for r in range(1, len(R)-1))  # 1b
-mdl.add_constraints(mdl.sum(y[j, r] for j in N) == 1 for r in R)  # 1c !!! the sequence should be correct
-mdl.add_constraints(mdl.sum(y[j, r] for j in N) >= x[r] for r in R)  # 1d
-mdl.add_constraints(mdl.sum(z[j, k, r] for k in V if k != j) == y[j, r] for j in N for r in R)  # 1e
-mdl.add_constraints(mdl.sum(z[j, k, r] for j in V if j != k) == y[k, r] for k in N for r in R)  # 1f
-# TODO: 1g
-mdl.add_constraints(mdl.sum(u[r, s] for s in F) == x[r] for r in R)  # 1h
-mdl.add_constraints(mdl.sum(b_j[j] * y[j, r] for j in N) <= mdl.sum(s * Q * u[r, s] for s in F) for r in R)  # 1i
-mdl.add_constraints(mdl.sum(b_j[j] * y[j, r] for j in N) >= mdl.sum(((s - 1) * Q + 1) * u[r, s] for s in F) for r in R)  # 1j
-mdl.add_constraints(2 * delta[j, k, r, s] <= z[j, k, r] + u[r, s] for j in V for k in V if k != j for r in R for s in F)  # 1k
-# about the constraint 1k TypeError: cannot unpack non-iterable int object. Reason: for j, k in V -> for j in V for k in V
-#  also KeyError: (0, 0, 1, 1) -> means the pair 0, 0 should not exist (distance between the same node) -> if j != k
-mdl.add_constraints(1 + delta[j, k, r, s] >= z[j, k, r] + u[r, s] for j in V for k in V if k != j for r in R for s in F)  # 1l
-mdl.add_constraints(2 * sigma[j, r, s] <= y[j, r] + u[r, s] for j in N for r in R for s in F)  # 1m TODO: is k in sigma indexes a mistake in a paper? -> yes, the same for sigma in 1n
-mdl.add_constraints(1 + sigma[j, r, s] >= y[j, r] + u[r, s] for j in N for r in R for s in F)  # 1n
-mdl.add_constraints(mdl.sum(t * nu[j, s] * epsilon[j, r, s, t, p] for t in range(1, s + 1)) >= mdl.sum(b_jp[j, k] * sigma[j, r, s] for k in range(1, p + 1)) for j in N for r in R for s in F for p in P)  # 1o TODO: not sure if that's a correct implementation of sum from 1 to s. Plus is b_jk correct and not a mistake in a paper? -> looks good to me, b_jk is correct as stated in the paper (and the implementation)
-mdl.add_constraints(mdl.sum(((t - 1) * nu[j, s] + 1) * epsilon[j, r, s, t, p] for t in range(1, s + 1)) <= mdl.sum(b_jp[j, k] * sigma[j, r, s] for k in range(1, p + 1)) for j in N for r in R for s in F for p in P)  # 1p
-mdl.add_constraints(mdl.sum(epsilon[j, r, s, t, p] for t in range(1, s + 1)) == sigma[j, r, s] for j in N for r in R for s in F for p in P)  # 1q TODO: what is the set L? Should be F? -> yes should be F
-mdl.add_constraints(A_rs[r, s] >= D[r, s] + mdl.sum(c[j, k] * z[j, k, r] for k in V for j in V if j != k) + mdl.sum(U[j] * nu[j, t] * sigma[j, r, t] for t in F for j in N) - M * mdl.sum(u[r, t] for t in range(1, s + 1)) for r in R for s in F)  # 1r TODO: KeyError: (1, 0). Reason: why u[r, t] can be [1, 0] according to the model? Should sum be from t = 1 to s? range(s) -> range(1, s + 1) -> I think the t=0 is a mistake, but going only until s-1 is correct, otherwise the Big-M formulation would also not work properly -> range(1, s) should be correct
-# TODO: 1s can be implemented by changing C_rt to A_rs
-# TODO: 1t can be implemented by changing C_rt to A_rs
-mdl.add_constraints(E[j, p] >= d[p] - F_jp[j, p] for j in N for p in P)  # 1u
-mdl.add_constraints(T[j, p] >= F_jp[j, p] - d[p] for j in N for p in P)  # 1u
+# sigma, delta and epsilon constraints
+mdl.add_indicator_constraints(mdl.indicator_constraint(y[j, r] and u[r, s], sigma[j, r, s] == 1) for j in V for r in R for s in F)  # TODO not sure if it is working correctly
+mdl.add_indicator_constraints(mdl.indicator_constraint(z[j, k, r] and u[r, s], delta[j, k, r, s] == 1) for j, k in A for r in R for s in F)  # same as above
+# mdl.add_indicator_constraints(mdl.indicator_constraint(epsilon[j, r, s, t, p], delta[j, r, s])  # TODO
 
+# 1b
+mdl.add_constraints(x[r + 1] <= x[r] for r in range(1, len(R)-1))
+# 1c
+mdl.add_constraints(mdl.sum(y[j, r] for j in N) == 1 for r in R)
+# 1d
+mdl.add_constraints(mdl.sum(y[j, r] for j in N) >= x[r] for r in R)
+# 1e
+mdl.add_constraints(mdl.sum(z[j, k, r] for k in V if k != j) == y[j, r] for j in N for r in R)
+# 1f
+mdl.add_constraints(mdl.sum(z[j, k, r] for j in V if j != k) == y[k, r] for k in N for r in R)
+# TODO: 1g
+# 1h
+mdl.add_constraints(mdl.sum(u[r, s] for s in F) == x[r] for r in R)
+# 1i
+mdl.add_constraints(mdl.sum(b_j[j] * y[j, r] for j in N) <= mdl.sum(s * Q * u[r, s] for s in F) for r in R)
+# 1j
+mdl.add_constraints(mdl.sum(b_j[j] * y[j, r] for j in N) >= mdl.sum(((s - 1) * Q + 1) * u[r, s] for s in F) for r in R)
+# 1k
+mdl.add_constraints(2 * delta[j, k, r, s] <= z[j, k, r] + u[r, s] for j in V for k in V if k != j for r in R for s in F)
+# TypeError: cannot unpack non-iterable int object. Reason: for j, k in V -> for j in V for k in V
+# also KeyError: (0, 0, 1, 1) -> means the pair 0, 0 should not exist (distance between the same node) -> if j != k
+# 1l
+mdl.add_constraints(1 + delta[j, k, r, s] >= z[j, k, r] + u[r, s] for j in V for k in V if k != j for r in R for s in F)
+# 1m
+mdl.add_constraints(2 * sigma[j, r, s] <= y[j, r] + u[r, s] for j in N for r in R for s in F)
+# Q: is k in sigma indexes a mistake in a paper? A: yes, the same for sigma in 1n
+# 1n
+mdl.add_constraints(1 + sigma[j, r, s] >= y[j, r] + u[r, s] for j in N for r in R for s in F)
+# 1o
+mdl.add_constraints(mdl.sum(t * nu[j, s] * epsilon[j, r, s, t, p] for t in range(1, s + 1)) >= mdl.sum(b_jp[j, k] * sigma[j, r, s] for k in range(1, p + 1)) for j in N for r in R for s in F for p in P)
+# Q: not sure if that's a correct implementation of sum from 1 to s. A: looks good to me
+# Q: plus is b_jk correct and not a mistake in a paper? A: b_jk is correct as stated in the paper (and the implementation)
+# 1p
+mdl.add_constraints(mdl.sum(((t - 1) * nu[j, s] + 1) * epsilon[j, r, s, t, p] for t in range(1, s + 1)) <= mdl.sum(b_jp[j, k] * sigma[j, r, s] for k in range(1, p + 1)) for j in N for r in R for s in F for p in P)
+# 1q
+mdl.add_constraints(mdl.sum(epsilon[j, r, s, t, p] for t in range(1, s + 1)) == sigma[j, r, s] for j in N for r in R for s in F for p in P)
+# Q: what is the set L? Should be F? A: yes should be F
+# 1r
+mdl.add_constraints(A_rs[r, s] >= D[r, s] + mdl.sum(c[j, k] * z[j, k, r] for j in V for k in V if k != j) + mdl.sum(U[j] * nu[j, t] * sigma[j, r, t] for j in N for t in F) - M * mdl.sum(u[r, t] for t in range(1, s)) for r in R for s in F)
+# Q: KeyError: (1, 0). Reason: why u[r, t] can be [1, 0] according to the model? Should sum be from t = 1 to s? range(s) -> range(1, s + 1)
+# A: I think the t=0 is a mistake, but going only until s-1 is correct, otherwise the Big-M formulation would also not work properly -> range(1, s) should be correct
+# 1s
+mdl.add_constraints(F_jp[j, p] >= A_rs[r, s] + M * (epsilon[j, r, s, t, p] - 1) for j in N for r in R for s in F for p in P for t in F)
+# implemented by changing C_rt to A_rs
+# 1t
+mdl.add_constraints(F_jp[j, p] <= A_rs[r, s] + M * (1 - epsilon[j, r, s, t, p]) for j in N for r in R for s in F for p in P for t in F)
+# implemented by changing C_rt to A_rs
+# 1u
+mdl.add_constraints(E[j, p] >= d[p] - F_jp[j, p] for j in N for p in P)
+# 1v
+mdl.add_constraints(T[j, p] >= F_jp[j, p] - d[p] for j in N for p in P)
+# TODO: check the parameters with double sum
 # mdl.parameters.timelimit = 15
 
 # SOLVE AND PRINT
 solution = mdl.solve(log_output=True)
 print(solution)
 solution.solve_status
-
-# EVERYTHING NEXT HASN'T BEEN DONE YET
-
-active_arcs = [a for a in A if x[a].solution_value > 0.9]
-plt.scatter(loc_x[1:], loc_y[1:], c='b')
-for i in N:
-    plt.annotate('$q_%d=%d$' % (i, q[i]), (loc_x[i]+2, loc_y[i]))
-for i, j in active_arcs:
-    plt.plot([loc_x[i], loc_x[j]], [loc_y[i], loc_y[j]], c='g', alpha=0.3)
-plt.plot(loc_x[0], loc_y[0], c='r', marker='s')
-plt.axis('equal')
-plt.show()
 
 
 
