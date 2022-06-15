@@ -46,7 +46,7 @@ df_routes = pd.read_csv("data/routes.txt")
 
 
 
-Q = 10  # vehicle capacity in boxes
+Q = 1000  # vehicle capacity in boxes
 N = []  # set of nodes without the depot
 for i in range(1, len(df_nodes)):
     N.append(i)
@@ -138,18 +138,19 @@ mdl = Model('CVRP')
 
 # VARIABLES
 x = mdl.binary_var_dict(R, name='x')  # do we select a route
-y = mdl.binary_var_dict(((j, r) for j in N for r in R), name='y')  # is the supplier assigned !!! to route? TODO: is "for j in N" correct or should it be V? Same applies for sigma, epsilon, F_jp, E and T
-z = mdl.binary_var_dict(((j, k, r) for j, k in A for r in R), name='z')  # is arc (j, k) visited !!! by route r?
+y = mdl.binary_var_dict(((j, r) for j in V for r in R), name='y')  # is the supplier assigned to route? is "for j in N" correct or should it be V? Same applies for sigma, epsilon, F_jp, E and T
+z = mdl.binary_var_dict(((j, k, r) for j, k in A for r in R), name='z')  # is arc (j, k) visited by route r?
 u = mdl.binary_var_dict(((r, s) for r in R for s in F), name='u')  # is frequency of route r s? Lukas: because of that I think its easier when F is just a list going from 1 to the largest possible visting frequency for any supplier
-D = mdl.continuous_var_dict(((r, s) for r in R for s in F), name='D')  # the departure time of the sth visit from the manufacturer for route r Lukas: Frequency again. TODO: is "of the sth visit" the same as frequency?
+D = mdl.continuous_var_dict(((r, s) for r in R for s in F), name='D')  # the departure time of the sth visit from the manufacturer for route r Lukas: Frequency again
 A_rs = mdl.continuous_var_dict(((r, s) for r in R for s in F), name='A_rs')  # the arrival time of the sth visit from the manufacturer for route r. Note that we can't use just A because A is reserved for arc set
-sigma = mdl.binary_var_dict(((j, r, s) for j in N for r in R for s in F), name='sigma')  # is equal to 1 if y_jr = 1, u_rs = 1 and 0 otherwise
+sigma = mdl.binary_var_dict(((j, r, s) for j in V for r in R for s in F), name='sigma')  # is equal to 1 if y_jr = 1, u_rs = 1 and 0 otherwise
 delta = mdl.binary_var_dict(((j, k, r, s) for j, k in A for r in R for s in F), name='delta')  # is equal to 1 if z_jkr = 1, u_rs = 1 and 0 otherwise
-epsilon = mdl.binary_var_dict(((j, r, s, t, p) for j in N for r in R for s in F for t in F for p in P), name='epsilon_jrstp')  # is equal to 1 if delta_jrs = 1 and t-th visit of route r meet the demand needed from supplier j on P-LANE p and 0 otherwise
-F_jp = mdl.continuous_var_dict(((j, p) for j in N for p in P), name='F_jp')  # is the finish time when the parts collected from supplier j meet the demand on P-LANE p. Note that we can't use just F because F is reserved for set of frequencies
-E = mdl.continuous_var_dict(((j, p) for j in N for p in P), name='E')  # is the earliness of supplier j on P-LANE p
-T = mdl.continuous_var_dict(((j, p) for j in N for p in P), name='T')  # is the tardiness time of supplier j on P-LANE p
+epsilon = mdl.binary_var_dict(((j, r, s, t, p) for j in V for r in R for s in F for t in F for p in P), name='epsilon_jrstp')  # is equal to 1 if delta_jrs = 1 and t-th visit of route r meet the demand needed from supplier j on P-LANE p and 0 otherwise
+F_jp = mdl.continuous_var_dict(((j, p) for j in V for p in P), name='F_jp')  # is the finish time when the parts collected from supplier j meet the demand on P-LANE p. Note that we can't use just F because F is reserved for set of frequencies
+E = mdl.continuous_var_dict(((j, p) for j in V for p in P), name='E')  # is the earliness of supplier j on P-LANE p
+T = mdl.continuous_var_dict(((j, p) for j in V for p in P), name='T')  # is the tardiness time of supplier j on P-LANE p
 M = 10e10  # sufficiently big number Lukas: might be a little bit too big, reducing it would be benefical for solving time, issue of parameter tuning
+
 # OBJECTIVE
 mdl.minimize(mdl.sum(phi * s * c[j, k] * delta[j, k, r, s] for j in V for k in V if j != k for r in R for s in F) +
              mdl.sum(omega * s * u[r, s] for r in R for s in F) +
@@ -157,11 +158,6 @@ mdl.minimize(mdl.sum(phi * s * c[j, k] * delta[j, k, r, s] for j in V for k in V
              mdl.sum(psi * T[j, p] for j in N for p in P))
 
 # CONSTRAINTS
-# sigma, delta and epsilon constraints
-# mdl.add_indicator_constraints(mdl.indicator_constraint(y[j, r] and u[r, s], sigma[j, r, s] == 1) for j in V for r in R for s in F)  # TODO not sure if it is working correctly
-# mdl.add_indicator_constraints(mdl.indicator_constraint(z[j, k, r] and u[r, s], delta[j, k, r, s] == 1) for j, k in A for r in R for s in F)  # same as above
-# mdl.add_indicator_constraints(mdl.indicator_constraint(epsilon[j, r, s, t, p], delta[j, r, s])  # TODO
-
 # 1b
 mdl.add_constraints(x[r + 1] <= x[r] for r in range(1, len(R)-1))
 
@@ -220,7 +216,7 @@ mdl.add_constraints(mdl.sum(epsilon[j, r, s, t, p] for t in range(1, s + 1)) == 
 # 1r
 mdl.add_constraints(A_rs[r, s] >= D[r, s] + mdl.sum(c[j, k] * z[j, k, r] for j in V for k in V if k != j) + mdl.sum(U[j] * nu[j, t] * sigma[j, r, t] for j in N for t in F) - M * mdl.sum(u[r, t] for t in range(1, s)) for r in R for s in F)
 # Q: KeyError: (1, 0). Reason: why u[r, t] can be [1, 0] according to the model? Should sum be from t = 1 to s? range(s) -> range(1, s + 1)
-# A: I think the t=0 is a mistake, but going only until s-1 is correct, otherwise the Big-M formulation would also not work properly -> range(1, s) should be correct TODO: why?
+# A: I think the t=0 is a mistake, but going only until s-1 is correct, otherwise the Big-M formulation would also not work properly -> range(1, s) should be correct
 
 # 1s
 mdl.add_constraints(F_jp[j, p] >= A_rs[r, s] + M * (epsilon[j, r, s, t, p] - 1) for j in N for r in R for s in F for p in P for t in F)
@@ -235,112 +231,9 @@ mdl.add_constraints(E[j, p] >= d[p] - F_jp[j, p] for j in N for p in P)
 
 # 1v
 mdl.add_constraints(T[j, p] >= F_jp[j, p] - d[p] for j in N for p in P)
-# TODO: check the parameters with double sum
 # mdl.parameters.timelimit = 15
 
 # SOLVE AND PRINT
 solution = mdl.solve(log_output=True)
 print(solution)
 solution.solve_status
-
-
-
-
-
-# # PREVIOUS VERSION
-# import pandas as pd
-# import cplex
-# from instances.Tools import create_graph, print_solution
-#
-# df_nodes = pd.read_csv("data/nodes.txt")
-#
-# # PERMUTATION (if needed)
-# # import random
-# # for row, content in df_nodes.iterrows():
-# #     if row == 0:
-# #         df_nodes.iloc[row, 0] = int(random.uniform(0, 500))
-# #         df_nodes.iloc[row, 1] = int(random.uniform(0, 500))
-# #     else:
-# #         df_nodes.iloc[row, 0] = int(random.uniform(0, 500))
-# #         df_nodes.iloc[row, 1] = int(random.uniform(0, 500))
-# #         df_nodes.iloc[row, 2] = int(random.uniform(300, 600))
-# # df_nodes.to_csv('data/nodes_permutated.txt', index=False)
-#
-# # LOCATIONS (coordinates of nodes)
-# locations = df_nodes.drop(columns=['Demand[kg]']).values.tolist()
-#
-# # DEMANDS (in kg)
-# demands = df_nodes.drop(columns=['Lon', 'Lat']).values.tolist()
-#
-# # VEHICLES
-# payload = 900
-# vehicles = 6
-#
-# location_list = create_graph(locations, demands)  # call the function to create the locations. 7 locations (2 of which with 0 demand at the end and start represent depos)
-#
-# cpx = cplex.Cplex()
-# cpx.parameters.timelimit.set(225.0)  # you can set the time limit in seconds
-# cpx.objective.set_sense(cpx.objective.sense.minimize)
-#
-# x = {i: {j: "x_" + str(i) + "_" + str(j) for j in range(len(location_list))} for i in range(len(location_list))}
-# # x - names of edges. x[0][1] for example will return us x_0_1
-#
-# y = {i: "y_" + str(i) for i in range(len(location_list))}
-#
-# # _____DECISION VARIABLES_____
-# # edge decision variable - do we keep the edge
-# for i in location_list:
-#     for j in location_list:
-#         if j.index != i.index:  # excluding the case when locations are the same (distance 0)
-#             cpx.variables.add(obj=[i.distance[j]], types=["B"], names=[x[i.index][j.index]])
-#             # [i.distance[j]] - distance between i and j
-#             # [x[i.index][j.index]] - x[0][1] for example will return us x_0_1
-#
-# # print(cpx.variables.get_types())
-# # print(len(location_list))
-#
-# # node decision variable - ???
-# for i in location_list:
-#     cpx.variables.add(lb=[i.demand[0]], ub=[payload], types=["C"], names=[y[i.index]])
-#     # note that y variables are continuous
-#
-#
-# # _____CONSTRAINTS_____
-# # all nodes are visited exactly once
-# for i in location_list:  # constraints 1 (2.2)
-#     if i.index != 0 and i.index != len(location_list) - 1:  # excluding the depos
-#         coef_1, var_1 = [], []  # what's that?
-#         for j in location_list:
-#             if j.index != i.index and j.index != 0:  # excluding the same locations + depos
-#                 coef_1.append(1)  # appending just the number 1 for some reason
-#                 var_1.append(x[i.index][j.index])  # appending the name of the edge
-#         cpx.linear_constraints.add(lin_expr=[[var_1, coef_1]], senses=["E"], rhs=[1])  # if rhs is 1 then can for example a float 0.5 be a result?
-#
-# for h in location_list:  # constraints 2 (2.3)
-#     if h.index != 0 and h.index != len(location_list) - 1:  # excluding the depos
-#         coef_2, var_2 = [], []
-#         for i in location_list:
-#             if i.index != len(location_list) - 1 and i is not h:  # excluding the last node (depo) and the same nodes
-#                 coef_2.append(1)
-#                 var_2.append(x[i.index][h.index])
-#         for j in location_list:
-#             if j.index != 0 and j is not h:  # excluding the first node (depo) and the same nodes
-#                 coef_2.append(-1)
-#                 var_2.append(x[h.index][j.index])
-#         cpx.linear_constraints.add(lin_expr=[[var_2, coef_2]], senses=["E"], rhs=[0])
-#
-# coef_3, var_3 = [], []  # constraints 3 (2.4)
-# for j in location_list:
-#     if j.index != 0 and j.index != len(location_list) - 1:  # excluding the first node (depo) and the same nodes
-#         coef_3.append(1)
-#         var_3.append(x[0][j.index])  # x_0_1, x_0_2 and so on
-# cpx.linear_constraints.add(lin_expr=[[var_3, coef_3]], senses=["L"], rhs=[vehicles])
-#
-# for i in location_list:  # constraints 4 (2.5)
-#     for j in location_list:
-#         if j.index != i.index:
-#             coef_4 = [1, -1, -j.demand[0] - payload]
-#             var_4 = [y[j.index], y[i.index], x[i.index][j.index]]
-#             cpx.linear_constraints.add(lin_expr=[[var_4, coef_4]], senses=["G"], rhs=[-payload])
-#
-# print_solution(cpx, location_list, x, y)  # solve the model and print the solution
