@@ -4,6 +4,7 @@ import numpy as np
 import random
 import math
 from docplex.mp.model import Model
+from itertools import combinations
 
 df_nodes = pd.read_csv("data/nodes.txt")
 df_routes = pd.read_csv("data/routes.txt")
@@ -51,6 +52,11 @@ N = []  # set of nodes without the depot
 for i in range(1, len(df_nodes)):
     N.append(i)
 V = [0] + N  # set of nodes with the depot
+
+S = []   # set of all possible subtours without the depot (needed for constraint 1g)
+for L in range(2, len(N)+1):
+    for subset in combinations(N, L):
+        S.append(subset)
 
 loc_x = df_nodes["Lon"].to_list()
 loc_y = df_nodes["Lat"].to_list()
@@ -176,6 +182,7 @@ mdl.add_constraints(mdl.sum(z[j, k, r] for j in V if j != k) == y[k, r] for k in
 # if j != k because the distance between the same arcs doesn't exist (KeyError)
 
 # TODO: 1g
+mdl.add_constraints(mdl.sum(z[j, k, r] for j in subtour for k in subtour if j != k) <= len(subtour)-1 for subtour in S for r in R)
 
 # 1h
 mdl.add_constraints(mdl.sum(u[r, s] for s in F) == x[r] for r in R)
