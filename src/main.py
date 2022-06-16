@@ -165,7 +165,7 @@ mdl.minimize(mdl.sum(phi * s * c[j, k] * delta[j, k, r, s] for j in V for k in V
 
 # CONSTRAINTS
 # 1b
-mdl.add_constraints(x[r + 1] <= x[r] for r in range(1, len(R)-1))
+mdl.add_constraints(x[r + 1] <= x[r] for r in range(1, len(R)))
 
 # 1c
 mdl.add_constraints(mdl.sum(y[j, r] for r in R) == 1 for j in N)
@@ -242,5 +242,4 @@ mdl.add_constraints(T[j, p] >= F_jp[j, p] - d[p] for j in N for p in P)
 
 # SOLVE AND PRINT
 solution = mdl.solve(log_output=True)
-print(solution)
-solution.solve_status
+solution.get_value_dict(F_jp, keep_zeros=False)
