@@ -8,6 +8,8 @@ from itertools import combinations
 
 df_nodes = pd.read_csv("data/nodes.txt")
 df_routes = pd.read_csv("data/routes.txt")
+df_nodes = df_nodes.iloc[:6]
+df_routes = df_routes.iloc[:20]
 
 # DATA HANDLING
 
@@ -62,8 +64,6 @@ loc_x = df_nodes["Lon"].to_list()
 loc_y = df_nodes["Lat"].to_list()
 
 # plt.scatter(loc_x[1:], loc_y[1:], c='b')
-# for i in N:
-#     plt.annotate('$q_%d=%d$'%(i,q[i]), (loc_x[i]+2, loc_y[i]))
 # plt.plot(loc_x[0], loc_y[0], c='r', marker='s')
 # plt.axis('equal')
 # plt.show()
@@ -226,11 +226,11 @@ mdl.add_constraints(A_rs[r, s] >= D[r, s] + mdl.sum(c[j, k] * z[j, k, r] for j i
 # A: I think the t=0 is a mistake, but going only until s-1 is correct, otherwise the Big-M formulation would also not work properly -> range(1, s) should be correct
 
 # 1s
-mdl.add_constraints(F_jp[j, p] >= A_rs[r, s] + M * (epsilon[j, r, s, t, p] - 1) for j in N for r in R for s in F for p in P for t in F)
-# implemented by changing C_rt to A_rs
+mdl.add_constraints(F_jp[j, p] >= A_rs[r, t] + M * (epsilon[j, r, s, t, p] - 1) for j in N for r in R for s in F for p in P for t in F)
+# implemented by changing C_rt to A_rs. TODO: A_rs[r, s] or A_rs[r, t]? Same for 1t
 
 # 1t
-mdl.add_constraints(F_jp[j, p] <= A_rs[r, s] + M * (1 - epsilon[j, r, s, t, p]) for j in N for r in R for s in F for p in P for t in F)
+mdl.add_constraints(F_jp[j, p] <= A_rs[r, t] + M * (1 - epsilon[j, r, s, t, p]) for j in N for r in R for s in F for p in P for t in F)
 # implemented by changing C_rt to A_rs
 
 # 1u
