@@ -49,7 +49,7 @@ df_routes = df_routes.iloc[:20]
 
 
 
-Q = 1000  # vehicle capacity in boxes
+Q = 20  # vehicle capacity in boxes
 N = []  # set of nodes without the depot
 for i in range(1, len(df_nodes)):
     N.append(i)
@@ -110,7 +110,7 @@ for row, content in df_nodes.iloc[1:].iterrows():
 #     F[j] = math.ceil(b_j[j] / Q)  # !!! not exactly like in the base model (not using range)
 #     # F[j] = list(range(1, math.ceil(b_j[j] / Q) + 1))  # all visiting frequencies (old version)
 F = []
-F.extend(list(range(1, math.ceil(b_j[j] / Q) + 1)))  # all visiting frequencies (old version)
+F.extend(list(range(1, math.ceil(sum(b_j.values()) / Q) + 1)))  # all visiting frequencies
 
 nu = {}  # the average number of boxes collected from supplier j per each visit if supplier j is visited s times
 for j in range(1, len(b_j) + 1):
@@ -174,11 +174,11 @@ mdl.add_constraints(mdl.sum(y[j, r] for r in R) == 1 for j in N)
 mdl.add_constraints(mdl.sum(y[j, r] for j in N) >= x[r] for r in R)
 
 # 1e
-mdl.add_constraints(mdl.sum(z[j, k, r] for k in V if k != j) == y[j, r] for j in N for r in R)
+mdl.add_constraints(mdl.sum(z[j, k, r] for k in V if j != k) == y[j, r] for j in N for r in R)
 # if k != j because the distance between the same arcs doesn't exist (KeyError)
 
 # 1f
-mdl.add_constraints(mdl.sum(z[j, k, r] for j in V if j != k) == y[k, r] for k in N for r in R)
+mdl.add_constraints(mdl.sum(z[j, k, r] for j in V if k != j) == y[k, r] for k in N for r in R)
 # if j != k because the distance between the same arcs doesn't exist (KeyError)
 
 # TODO: 1g
@@ -194,12 +194,12 @@ mdl.add_constraints(mdl.sum(b_j[j] * y[j, r] for j in N) <= mdl.sum(s * Q * u[r,
 mdl.add_constraints(mdl.sum(b_j[j] * y[j, r] for j in N) >= mdl.sum(((s - 1) * Q + 1) * u[r, s] for s in F) for r in R)
 
 # 1k
-mdl.add_constraints(2 * delta[j, k, r, s] <= z[j, k, r] + u[r, s] for j in V for k in V if k != j for r in R for s in F)
+mdl.add_constraints(2 * delta[j, k, r, s] <= z[j, k, r] + u[r, s] for j in V for k in V if j != k for r in R for s in F)
 # TypeError: cannot unpack non-iterable int object. Reason: for j, k in V -> for j in V for k in V
 # if k != j because the distance between the same arcs doesn't exist (KeyError)
 
 # 1l
-mdl.add_constraints(1 + delta[j, k, r, s] >= z[j, k, r] + u[r, s] for j in V for k in V if k != j for r in R for s in F)
+mdl.add_constraints(1 + delta[j, k, r, s] >= z[j, k, r] + u[r, s] for j in V for k in V if j != k for r in R for s in F)
 
 # 1m
 mdl.add_constraints(2 * sigma[j, r, s] <= y[j, r] + u[r, s] for j in N for r in R for s in F)
@@ -221,7 +221,7 @@ mdl.add_constraints(mdl.sum(epsilon[j, r, s, t, p] for t in range(1, s + 1)) == 
 # Q: what is the set L? Should be F? A: yes should be F
 
 # 1r
-mdl.add_constraints(A_rs[r, s] >= D[r, s] + mdl.sum(c[j, k] * z[j, k, r] for j in V for k in V if k != j) + mdl.sum(U[j] * nu[j, t] * sigma[j, r, t] for j in N for t in F) - M * mdl.sum(u[r, t] for t in range(1, s)) for r in R for s in F)
+mdl.add_constraints(A_rs[r, s] >= D[r, s] + mdl.sum(c[j, k] * z[j, k, r] for j in V for k in V if j != k) + mdl.sum(U[j] * nu[j, t] * sigma[j, r, t] for j in N for t in F) - M * mdl.sum(u[r, t] for t in range(1, s)) for r in R for s in F)
 # Q: KeyError: (1, 0). Reason: why u[r, t] can be [1, 0] according to the model? Should sum be from t = 1 to s? range(s) -> range(1, s + 1)
 # A: I think the t=0 is a mistake, but going only until s-1 is correct, otherwise the Big-M formulation would also not work properly -> range(1, s) should be correct
 
@@ -242,4 +242,4 @@ mdl.add_constraints(T[j, p] >= F_jp[j, p] - d[p] for j in N for p in P)
 
 # SOLVE AND PRINT
 solution = mdl.solve(log_output=True)
-solution.get_value_dict(F_jp, keep_zeros=False)
+solution.get_value_dict(z, keep_zeros=False)
