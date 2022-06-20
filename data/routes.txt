@@ -1,4 +1,4 @@
-From[supplier],To[P-LANE],Demand[boxes]
+From[supplier],To[P-LANE],Demand[paletts]
 1,1,5
 1,2,8
 1,3,2

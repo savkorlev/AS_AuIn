@@ -6,10 +6,10 @@ import math
 from docplex.mp.model import Model
 from itertools import combinations
 
-peri = 200000    # perimeter, in which the suppliers are arranged around the manufacturer (in meters!)
+peri = 100000    # perimeter, in which the suppliers are arranged around the manufacturer (in meters!)
 
 random.seed(0)
-num_supp = 8
+num_supp = 3
 supp_list = [[peri/2, peri/2, 0]]   # manufacturer is in the middle
 for i in range(1,num_supp+1):
     x = int(random.uniform(0, peri))
@@ -72,7 +72,7 @@ for j in N:
         sum_b_j += b_jp[(j, p)]
     b_j[j] = sum_b_j
 
-random.seed(0)
+
 d = {p: int(random.uniform(6, 24)) * 60 for p in P}  # the due date of P-LANE p (in minutes)
 # TODO: make it actual times and part of dataset and not randomly generated. Issue - we don't have a dataset for P-LANEs
 
@@ -102,7 +102,7 @@ v = {1: 670, 2: 830, 3:1000}  # set of actual speed levels (40, 50 and 60 km/h i
 
 c_e = 0.06453 * 10 ** (-6)    # electricity costs [€/J]
 c_c = 0.0359 * 10 ** (-6) # fuel costs [€/J]
-o_e = 325.20 * 1.1    # costs per electric truck [€/day]
+o_e = 325.20    # costs per electric truck [€/day]
 o_c = 271.20    # costs per ICE truck [€/day]
 alpha = 0.0981  # arc specific energy consumption constant [m/s2]
 beta = 3.6123   # vehicle specific energy consumption constant [kg/m]
@@ -186,7 +186,8 @@ delta_c = mdl.binary_var_dict(((j, k, r, s) for j, k in A for r in R for s in F)
 
 ################################### Extension objective function ##################################################
 
-mdl.minimize(mdl.sum(omega * s * u[r, s] for r in R for s in F) +
+mdl.minimize(
+             mdl.sum(omega * s * u[r, s] for r in R for s in F) +
              mdl.sum(((f_e[j, k, r, s] + m_e * delta_e[j, k, r, s]) * c[j, k]) * alpha * c_e * gamma_e * s for j, k in A for r in R for s in F) +
              mdl.sum(((f_c[j, k, r, s] + m_c * delta_c[j, k, r, s]) * c[j, k]) * alpha * (c_c + e) * gamma_c * s for j, k in A for r in R for s in F) +
              mdl.sum((mdl.sum((v[l]/60) ** 2 * g_e[j, k, r, l, s] for l in L) * c[j, k] * beta) * c_e * gamma_e * s for j, k in A for r in R for s in F) +
@@ -244,9 +245,7 @@ mdl.add_constraints((1 + sigma[j, r, s] >= y[j, r] + u[r, s] for j in N for r in
 
 
 ############################### Extensions #################################################################
-#
-# # TODO: OBJECTIVES
-#
+
 # load constraint 1
 mdl.add_constraints((mdl.sum(f_e[j, k, r, s] for k in V if k != j) - mdl.sum(f_e[k , j, r, s] for k in V if k != j) == l_js[j, s] * sigma_e[j, r, s] for r in R for s in F for j in N), names = 'load-constraint e1')
 
@@ -316,10 +315,13 @@ mdl.add_constraints(1 + delta_c[j, k, r, s] >= delta[j, k, r, s] + t_c[r] for j,
 mdl.add_constraints(mdl.sum(z[0, k, r] for k in N) == x[r] for r in R)
 
 # limit number of trucks of specific type
-# mdl.add_constraints(mdl.sum(t_c[r] for r in R) <= 0 for r in R)   # no electric truck can be used
+# mdl.add_constraints(mdl.sum(t_e[r] for r in R) <= 0 for r in R)   # no electric truck can be used
 
 # force multiple routes
-# mdl.add_constraint(mdl.sum(x[r] for r in R) == 4)
+# mdl.add_constraint(mdl.sum(x[r] for r in R) == 2)
+
+# force an arc to be used
+# mdl.add_constraint(mdl.sum(z[3, 2, r] for r in R) == 1)
 
 ########################################################################################################
 
