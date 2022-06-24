@@ -174,43 +174,7 @@ E_c = mdl.continuous_var_dict(((j, k) for j, k in A), name = 'E_c')
 delta_e = mdl.binary_var_dict(((j, k, r, s) for j, k in A for r in R for s in F), name = 'delta_e')
 delta_c = mdl.binary_var_dict(((j, k, r, s) for j, k in A for r in R for s in F), name = 'delta_c')
 
-#############################################################################################
-
-
-# OBJECTIVE
-# mdl.minimize(mdl.sum(phi * s * c[j, k] * delta[j, k, r, s] for j in V for k in V if j != k for r in R for s in F) +
-#              mdl.sum(omega * s * u[r, s] for r in R for s in F))
-
-################################### Extension objective function ##################################################
-
-mdl.minimize(
-             mdl.sum(omega * s * u[r, s] for r in R for s in F) +
-             mdl.sum(((f_e[j, k, r, s] + m_e * delta_e[j, k, r, s]) * c[j, k]) * alpha * c_e * gamma_e * s for j, k in A for r in R for s in F) +
-             mdl.sum(((f_c[j, k, r, s] + m_c * delta_c[j, k, r, s]) * c[j, k]) * alpha * (c_c + e) * gamma_c * s for j, k in A for r in R for s in F) +
-             mdl.sum((mdl.sum((v[l]/60) ** 2 * g_e[j, k, r, l, s] for l in L) * c[j, k] * beta) * c_e * gamma_e * s for j, k in A for r in R for s in F) +
-             mdl.sum((mdl.sum((v[l]/60) ** 2 * g_c[j, k, r, l, s] for l in L) * c[j, k] * beta) * (c_c + e) * gamma_c * s for j, k in A for r in R for s in F) +
-             mdl.sum(t_e[r] for r in R) * o_e +
-             mdl.sum(t_c[r] for r in R) * o_c)
-# Total costs: 325
-# Total [kWh]: 368
-# solution.get_objective_value() = 610.7
-
-# mdl.minimize(mdl.sum(omega * s * u[r, s] for r in R for s in F) +
-#              mdl.sum(t_e[r] for r in R) * o_e +
-#              mdl.sum(t_c[r] for r in R) * o_c)
-# # Total costs: 616
-# # Total [kWh]: 1057
-# # solution.get_objective_value() = 471.2
-
-# mdl.minimize(mdl.sum(((f_e[j, k, r, s] + m_e * delta_e[j, k, r, s]) * c[j, k]) * alpha * c_e * gamma_e * s for j, k in A for r in R for s in F) +
-#              mdl.sum(((f_c[j, k, r, s] + m_c * delta_c[j, k, r, s]) * c[j, k]) * alpha * (c_c + e) * gamma_c * s for j, k in A for r in R for s in F) +
-#              mdl.sum((mdl.sum((v[l]/60) ** 2 * g_e[j, k, r, l, s] for l in L) * c[j, k] * beta) * c_e * gamma_e * s for j, k in A for r in R for s in F) +
-#              mdl.sum((mdl.sum((v[l]/60) ** 2 * g_c[j, k, r, l, s] for l in L) * c[j, k] * beta) * (c_c + e) * gamma_c * s for j, k in A for r in R for s in F))
-# # Total costs: 1938
-# # Total [kWh]: 130
-# # solution.get_objective_value() = 29.6
 ####################################################################################################################
-
 
 # CONSTRAINTS
 # 1b
@@ -339,12 +303,78 @@ mdl.add_constraints(mdl.sum(z[0, k, r] for k in N) == x[r] for r in R)
 
 ########################################################################################################
 
-
-# SOLVE AND PRINT
+# SOLVE AND PRINT (+ EPSILON CONSTRAINT)
 mdl.parameters.mip.tolerances.integrality = 0   # forces the binary variables to be excatly 1 or 0 not like 0.999999 or 0.00000003, might lead to a false infeasibility -> increase value slightly then (default = 1e-05); necesarry for Big M formulation of load constraints
-solution = mdl.solve(log_output=True)
-# print(solution)
+# solution = mdl.solve(log_output=True)
 
+################################### Extension objective function ##################################################
+
+# mdl.minimize(
+#              mdl.sum(omega * s * u[r, s] for r in R for s in F) +
+#              mdl.sum(((f_e[j, k, r, s] + m_e * delta_e[j, k, r, s]) * c[j, k]) * alpha * c_e * gamma_e * s for j, k in A for r in R for s in F) +
+#              mdl.sum(((f_c[j, k, r, s] + m_c * delta_c[j, k, r, s]) * c[j, k]) * alpha * (c_c + e) * gamma_c * s for j, k in A for r in R for s in F) +
+#              mdl.sum((mdl.sum((v[l]/60) ** 2 * g_e[j, k, r, l, s] for l in L) * c[j, k] * beta) * c_e * gamma_e * s for j, k in A for r in R for s in F) +
+#              mdl.sum((mdl.sum((v[l]/60) ** 2 * g_c[j, k, r, l, s] for l in L) * c[j, k] * beta) * (c_c + e) * gamma_c * s for j, k in A for r in R for s in F) +
+#              mdl.sum(t_e[r] for r in R) * o_e +
+#              mdl.sum(t_c[r] for r in R) * o_c)
+# # Total costs: 325
+# # Total [kWh]: 368
+# # solution.get_objective_value() = 610.7
+
+# truck costs + visits
+obj_tr_vis = mdl.sum(omega * s * u[r, s] for r in R for s in F) + \
+           mdl.sum(t_e[r] for r in R) * o_e + \
+           mdl.sum(t_c[r] for r in R) * o_c
+# # Total costs: 616
+# # Total [kWh]: 1057
+# # solution.get_objective_value() = 471.2
+
+# pollution/fuel costs
+obj_pol_fuel = mdl.sum(((f_e[j, k, r, s] + m_e * delta_e[j, k, r, s]) * c[j, k]) * alpha * c_e * gamma_e * s for j, k in A for r in R for s in F) + \
+           mdl.sum(((f_c[j, k, r, s] + m_c * delta_c[j, k, r, s]) * c[j, k]) * alpha * (c_c + e) * gamma_c * s for j, k in A for r in R for s in F) + \
+           mdl.sum((mdl.sum((v[l]/60) ** 2 * g_e[j, k, r, l, s] for l in L) * c[j, k] * beta) * c_e * gamma_e * s for j, k in A for r in R for s in F) + \
+           mdl.sum((mdl.sum((v[l]/60) ** 2 * g_c[j, k, r, l, s] for l in L) * c[j, k] * beta) * (c_c + e) * gamma_c * s for j, k in A for r in R for s in F)
+# # Total costs: 1938
+# # Total [kWh]: 130
+# # solution.get_objective_value() = 29.6
+
+payoff = {}
+
+mdl.minimize_static_lex([obj_tr_vis, obj_pol_fuel])
+solution = mdl.solve(log_output=True)
+payoff["transport"] = solution.get_objective_value()
+
+mdl.minimize_static_lex([obj_pol_fuel, obj_tr_vis])
+solution = mdl.solve(log_output=True)
+payoff["pollution"] = solution.get_objective_value()
+
+print('Each iteration will keep values lower than some values between min and max')
+
+l = 10  # important for step
+r = payoff["pollution"][1] - payoff["transport"][0]
+step = r / l
+steps = list(np.arange(payoff["transport"][0], payoff["pollution"][1], step)) + [payoff["pollution"][1]]
+
+# obj_values = []
+# mdl.e = 0
+# mdl.delta = 0.0001
+# mdl.s = mdl.continuous_var(name="mdl_s")
+# mdl.minimize_static_lex([obj_pol_fuel - mdl.delta * mdl.s, obj_tr_vis])
+# mdl.add_constraint(obj_tr_vis - mdl.s == mdl.e)
+# for s in steps:
+#     mdl.e = s
+#     solution = mdl.solve(log_output=True)
+#     obj_values.append(solution.get_objective_value())
+
+obj_values = []
+e_c_delta = 0.00001
+e_c_s = mdl.continuous_var(name="e_c_s")
+for s in steps:
+    mdl.minimize_static_lex([obj_pol_fuel - e_c_delta * e_c_s, obj_tr_vis])
+    mdl.add_constraint(obj_tr_vis - e_c_s == s, ctname='e_c_constr')
+    solution = mdl.solve(log_output=True)
+    obj_values.append(solution.get_objective_value())  # append also solution but for now just objective values to compare
+    mdl.remove_constraint('e_c_constr')
 
 # VISUALIZE THE RESULTS
 
