@@ -194,20 +194,20 @@ delta_c = mdl.binary_var_dict(((j, k, r, s) for j, k in A for r in R for s in F)
 #              mdl.sum(t_c[r] for r in R) * o_c) # conventional truck costs
 
 # TESTING PAYOFF TABLE
-# pollution/fuel costs
-obj_pol_fuel = mdl.sum(omega * s * u[r, s] for r in R for s in F) + \
+# truck costs + visits
+obj_tr_vis = mdl.sum(omega * s * u[r, s] for r in R for s in F) + \
            mdl.sum(t_e[r] for r in R) * o_e + \
            mdl.sum(t_c[r] for r in R) * o_c
 
-# truck costs + visits
-obj_tr_vis = mdl.sum(((f_e[j, k, r, s] + m_e * delta_e[j, k, r, s]) * c[j, k]) * alpha * c_e * gamma_e * s for j, k in A for r in R for s in F) + \
+# pollution/fuel costs
+obj_pol_fuel = mdl.sum(((f_e[j, k, r, s] + m_e * delta_e[j, k, r, s]) * c[j, k]) * alpha * c_e * gamma_e * s for j, k in A for r in R for s in F) + \
            mdl.sum(((f_c[j, k, r, s] + m_c * delta_c[j, k, r, s]) * c[j, k]) * alpha * (c_c + e) * gamma_c * s for j, k in A for r in R for s in F) + \
            mdl.sum((mdl.sum((v[l]/60) ** 2 * g_e[j, k, r, l, s] for l in L) * c[j, k] * beta) * c_e * gamma_e * s for j, k in A for r in R for s in F) + \
            mdl.sum((mdl.sum((v[l]/60) ** 2 * g_c[j, k, r, l, s] for l in L) * c[j, k] * beta) * (c_c + e) * gamma_c * s for j, k in A for r in R for s in F)
 
 obj = {
-       0: obj_pol_fuel,
-       1: obj_tr_vis,
+       0: obj_tr_vis,
+       1: obj_pol_fuel,
        }
 
 ####################################################################################################################
@@ -454,15 +454,11 @@ for k in range(0, len(obj)):
                     round((((weight_energy + speed_energy) * 10 ** (-6) * 0.278) / distance), 2)))
 
                 obj_total_cost_float += round(fuel_costs + fuel_costs_2 + costs_visit + truck_costs, 2)
-
-        print(str(op.LpStatus[result]) + " ; max value = " + str(op.value(model.objective)) +
-              " ; x1_opt = " + str(op.value(x[0])) +
-              " ; x2_opt = " + str(op.value(x[1])))
-        payoff[k, k] = op.value(model.objective);
+        payoff[k, k] = obj_total_cost_float
         kp = k + 1;
-        model = op.LpProblem("Max", op.LpMaximize)
+        mdl.minimize(obj[k])
+        solution = mdl.solve(log_output=True)
         while kp <= len(obj) - 1:
-            model += obj[kp]
             if kp - 1 >= 0:
                 model += obj[kp - 1] >= payoff[k, kp - 1]
             for i in range(0, len(cons)):

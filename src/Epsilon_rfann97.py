@@ -183,14 +183,31 @@ delta_c = mdl.binary_var_dict(((j, k, r, s) for j, k in A for r in R for s in F)
 
 ################################### Extension objective function ##################################################
 
-mdl.minimize(
-             mdl.sum(omega * s * u[r, s] for r in R for s in F) +
-             mdl.sum(((f_e[j, k, r, s] + m_e * delta_e[j, k, r, s]) * c[j, k]) * alpha * c_e * gamma_e * s for j, k in A for r in R for s in F) +
-             mdl.sum(((f_c[j, k, r, s] + m_c * delta_c[j, k, r, s]) * c[j, k]) * alpha * (c_c + e) * gamma_c * s for j, k in A for r in R for s in F) +
-             mdl.sum((mdl.sum((v[l]/60) ** 2 * g_e[j, k, r, l, s] for l in L) * c[j, k] * beta) * c_e * gamma_e * s for j, k in A for r in R for s in F) +
-             mdl.sum((mdl.sum((v[l]/60) ** 2 * g_c[j, k, r, l, s] for l in L) * c[j, k] * beta) * (c_c + e) * gamma_c * s for j, k in A for r in R for s in F) +
-             mdl.sum(t_e[r] for r in R) * o_e +
-             mdl.sum(t_c[r] for r in R) * o_c)
+# mdl.minimize(
+#              mdl.sum(omega * s * u[r, s] for r in R for s in F) +
+#              mdl.sum(((f_e[j, k, r, s] + m_e * delta_e[j, k, r, s]) * c[j, k]) * alpha * c_e * gamma_e * s for j, k in A for r in R for s in F) +
+#              mdl.sum(((f_c[j, k, r, s] + m_c * delta_c[j, k, r, s]) * c[j, k]) * alpha * (c_c + e) * gamma_c * s for j, k in A for r in R for s in F) +
+#              mdl.sum((mdl.sum((v[l]/60) ** 2 * g_e[j, k, r, l, s] for l in L) * c[j, k] * beta) * c_e * gamma_e * s for j, k in A for r in R for s in F) +
+#              mdl.sum((mdl.sum((v[l]/60) ** 2 * g_c[j, k, r, l, s] for l in L) * c[j, k] * beta) * (c_c + e) * gamma_c * s for j, k in A for r in R for s in F) +
+#              mdl.sum(t_e[r] for r in R) * o_e +
+#              mdl.sum(t_c[r] for r in R) * o_c)
+
+# TESTING PAYOFF TABLE
+# truck costs + visits
+obj_tr_vis = mdl.sum(omega * s * u[r, s] for r in R for s in F) + \
+           mdl.sum(t_e[r] for r in R) * o_e + \
+           mdl.sum(t_c[r] for r in R) * o_c
+
+# pollution/fuel costs
+obj_pol_fuel = mdl.sum(((f_e[j, k, r, s] + m_e * delta_e[j, k, r, s]) * c[j, k]) * alpha * c_e * gamma_e * s for j, k in A for r in R for s in F) + \
+           mdl.sum(((f_c[j, k, r, s] + m_c * delta_c[j, k, r, s]) * c[j, k]) * alpha * (c_c + e) * gamma_c * s for j, k in A for r in R for s in F) + \
+           mdl.sum((mdl.sum((v[l]/60) ** 2 * g_e[j, k, r, l, s] for l in L) * c[j, k] * beta) * c_e * gamma_e * s for j, k in A for r in R for s in F) + \
+           mdl.sum((mdl.sum((v[l]/60) ** 2 * g_c[j, k, r, l, s] for l in L) * c[j, k] * beta) * (c_c + e) * gamma_c * s for j, k in A for r in R for s in F)
+
+obj = {
+       0: obj_tr_vis,
+       1: obj_pol_fuel,
+       }
 
 ####################################################################################################################
 
@@ -325,127 +342,109 @@ mdl.add_constraints(mdl.sum(z[0, k, r] for k in N) == x[r] for r in R)
 
 # SOLVE AND PRINT
 mdl.parameters.mip.tolerances.integrality = 0   # forces the binary variables to be excatly 1 or 0 not like 0.999999 or 0.00000003, might lead to a false infeasibility -> increase value slightly then (default = 1e-05); necesarry for Big M formulation of load constraints
-solution = mdl.solve(log_output=True)
 # print(solution)
 
-
-# VISUALIZE THE RESULTS
-
-plt.scatter(loc_x[1:], loc_y[1:], c='b')
-for i in range(len(loc_x[1:])):
-    plt.text(loc_x[i+1], loc_y[i+1]+1000, str(i+1))
-plt.plot(loc_x[0], loc_y[0], c='r', marker='s')
-plt.text(loc_x[0], loc_y[0]+1000,'0')
-plt.axis('equal')
-
-
-for j in V:
-    for k in V:
-        for r in R:
-            if k != j:
-                if solution.get_value(z[j, k, r]) > 0.5:
-                    plt.plot([loc_x[j], loc_x[k]], [loc_y[j], loc_y[k]], linestyle='solid',color='black')
-
-plt.show()
-
-# PRINT OUT A SUMMARY OF THE RESULTS
-
-for r in R:
-    if solution.get_value(x[r]) == 1:
-        print('\nRoute ' + str(r))
-        sup = []
-        for j in N:
-            if solution.get_value(y[j, r]) == 1:
-                sup.append(j)
-        print(' Suppliers:' + str(sup))
-        for s in F:
-            if solution.get_value(u[r, s]) == 1:
-                freq = s
-        print(' Frequency: ' + str(freq))
-        if solution.get_value(t_e[r]) == 1:
-            print(' Vehicle type: electric')
-        if solution.get_value(t_c[r]) == 1:
-            print(' Vehicle type: conventional')
-        distance = 0
-        for j in V:
-            for k in V:
-                for s in F:
-                    if k != j:
-                        if (solution.get_value(delta[j, k, r, s]) == 1):
-                            distance += (c[j, k] * s) / 1000
-        print(' Driven distance in total [km]: ' + str(round(distance, 2)))
-        time_driving = 0
-        time_unloading = 0
-        for s in F:
-            for j, k in A:
-                for l in L:
-                    if j != k:
-                        if (solution.get_value(g_e[j, k, r, l, s]) == 1):
-                            time_driving += (c[j, k]/v[l]) * s
-                        if (solution.get_value(g_c[j, k, r, l, s]) == 1):
-                            time_driving += (c[j, k]/v[l]) * s
-        for s in F:
+for k in range(0, len(obj)):
+    mdl.minimize(obj[k])
+    solution = mdl.solve(log_output=True)
+    obj_total_cost = 0
+    for r in R:
+        if solution.get_value(x[r]) == 1:
+            print('\nRoute ' + str(r))
+            sup = []
             for j in N:
-                if (solution.get_value(sigma_e[j, r, s]) == 1):
-                    time_unloading += U[j]*nu[j, s] * s
-                if (solution.get_value(sigma_c[j, r, s]) == 1):
-                    time_unloading += U[j]*nu[j, s] * s
-        print(' Needed time:')
-        print('     In total (all trips) [min]: ' + str(round(time_driving + time_unloading)))
-        print('     Driving (all trips) [min]: ' + str(round(time_driving)))
-        print('     Loading (all trips) [min]: ' + str(round(time_unloading)))
-        print(' Costs:')
-        fuel_costs = 0
-        weight_energy = 0
-        for j in V:
-            for k in V:
-                if j != k:
+                if solution.get_value(y[j, r]) == 1:
+                    sup.append(j)
+            print(' Suppliers:' + str(sup))
+            for s in F:
+                if solution.get_value(u[r, s]) == 1:
+                    freq = s
+            print(' Frequency: ' + str(freq))
+            if solution.get_value(t_e[r]) == 1:
+                print(' Vehicle type: electric')
+            if solution.get_value(t_c[r]) == 1:
+                print(' Vehicle type: conventional')
+            distance = 0
+            for j in V:
+                for k in V:
                     for s in F:
-                            if (solution.get_value(f_e[j, k, r, s]) > 0):
-                                fuel_costs += solution.get_value(f_e[j, k, r, s]) * s * (c_e) * c[j, k] * alpha * gamma_e
-                                weight_energy += solution.get_value(f_e[j, k, r, s]) * s * c[j, k] * alpha * gamma_e
-                            if (solution.get_value(delta_e[j, k, r, s]) == 1):
-                                fuel_costs += m_e * s * (c_e) * c[j, k] * alpha * gamma_e
-                                weight_energy += m_e * s * c[j, k] * alpha * gamma_e
-                            if (solution.get_value(f_c[j, k, r, s]) > 0):
-                                fuel_costs += solution.get_value(f_c[j, k, r, s]) * s * (c_c + e) * c[j, k] * alpha * gamma_c
-                                weight_energy += solution.get_value(f_c[j, k, r, s]) * s * c[j, k] * alpha * gamma_c
-                            if (solution.get_value(delta_c[j, k, r, s]) == 1):
-                                fuel_costs += m_c * s * (c_c + e) * c[j, k] * alpha * gamma_c
-                                weight_energy += m_c * s * c[j, k] * alpha * gamma_c
-        print('     Fuel/Electricity costs (weight) [€]: ' + str(round(fuel_costs, 2)))
-        fuel_costs_2 = 0
-        speed_energy = 0
-        count = 0
-        for j in V:
-            for k in V:
-                if j != k:
-                    for s in F:
-                        for l in L:
+                        if k != j:
+                            if (solution.get_value(delta[j, k, r, s]) == 1):
+                                distance += (c[j, k] * s) / 1000
+            print(' Driven distance in total [km]: ' + str(round(distance, 2)))
+            time_driving = 0
+            time_unloading = 0
+            for s in F:
+                for j, k in A:
+                    for l in L:
+                        if j != k:
                             if (solution.get_value(g_e[j, k, r, l, s]) == 1):
-                                fuel_costs_2 += (v[l]/60) ** 2 * c[j, k] * beta * (c_e) * gamma_e * s
-                                speed_energy += (v[l]/60) ** 2 * c[j, k] * beta * gamma_e * s
+                                time_driving += (c[j, k]/v[l]) * s
                             if (solution.get_value(g_c[j, k, r, l, s]) == 1):
-                                fuel_costs_2 += (v[l]/60) ** 2 * c[j, k] * beta * (c_c + e) * gamma_c * s
-                                speed_energy += (v[l]/60) ** 2 * c[j, k] * beta * gamma_c * s
-        truck_costs = 0
-        if solution.get_value(t_e[r]) == 1:
-            truck_costs += o_e
-        if solution.get_value(t_c[r]) == 1:
-            truck_costs += o_c
-        costs_visit = 0
-        for s in F:
-            if solution.get_value(u[r, s]) == 1:
-                costs_visit += omega * s
-        print('     Fuel/Electricity costs (speed) [€]: ' + str(round(fuel_costs_2, 2)))
-        print('     Fuel/Electricity costs (total) [€]: ' + str(round(fuel_costs + fuel_costs_2, 2)))
-        print('     Fuel/Electricity costs (total per km) [€/km]: ' + str(round((fuel_costs + fuel_costs_2) / distance, 2)))
-        print('     Truck costs [€]: ' + str(round(truck_costs, 2)))
-        print('     Visits costs [€]: ' + str(round(costs_visit, 2)))
-        print('     Total costs [€]: ' + str(round(fuel_costs + fuel_costs_2 + costs_visit + truck_costs, 2)))
-        print(' Energy consumption: ')
-        print('     Weight related [kWh]: ' + str(round((weight_energy * 10 **(-6) * 0.278),2)))
-        print('     Speed related [kWh]: ' + str(round((speed_energy * 10 ** (-6) * 0.278), 2)))
-        print('     Total [kWh]: ' + str(round(((weight_energy + speed_energy) * 10 ** (-6) * 0.278), 2)))
-        print('     Energy consumption [kWh/km]: ' + str(round((((weight_energy + speed_energy) * 10 ** (-6) * 0.278) / distance),2)))
+                                time_driving += (c[j, k]/v[l]) * s
+            for s in F:
+                for j in N:
+                    if (solution.get_value(sigma_e[j, r, s]) == 1):
+                        time_unloading += U[j]*nu[j, s] * s
+                    if (solution.get_value(sigma_c[j, r, s]) == 1):
+                        time_unloading += U[j]*nu[j, s] * s
+            print(' Needed time:')
+            print('     In total (all trips) [min]: ' + str(round(time_driving + time_unloading)))
+            print('     Driving (all trips) [min]: ' + str(round(time_driving)))
+            print('     Loading (all trips) [min]: ' + str(round(time_unloading)))
+            print(' Costs:')
+            fuel_costs = 0
+            weight_energy = 0
+            for j in V:
+                for k in V:
+                    if j != k:
+                        for s in F:
+                                if (solution.get_value(f_e[j, k, r, s]) > 0):
+                                    fuel_costs += solution.get_value(f_e[j, k, r, s]) * s * (c_e) * c[j, k] * alpha * gamma_e
+                                    weight_energy += solution.get_value(f_e[j, k, r, s]) * s * c[j, k] * alpha * gamma_e
+                                if (solution.get_value(delta_e[j, k, r, s]) == 1):
+                                    fuel_costs += m_e * s * (c_e) * c[j, k] * alpha * gamma_e
+                                    weight_energy += m_e * s * c[j, k] * alpha * gamma_e
+                                if (solution.get_value(f_c[j, k, r, s]) > 0):
+                                    fuel_costs += solution.get_value(f_c[j, k, r, s]) * s * (c_c + e) * c[j, k] * alpha * gamma_c
+                                    weight_energy += solution.get_value(f_c[j, k, r, s]) * s * c[j, k] * alpha * gamma_c
+                                if (solution.get_value(delta_c[j, k, r, s]) == 1):
+                                    fuel_costs += m_c * s * (c_c + e) * c[j, k] * alpha * gamma_c
+                                    weight_energy += m_c * s * c[j, k] * alpha * gamma_c
+            print('     Fuel/Electricity costs (weight) [€]: ' + str(round(fuel_costs, 2)))
+            fuel_costs_2 = 0
+            speed_energy = 0
+            count = 0
+            for j in V:
+                for k in V:
+                    if j != k:
+                        for s in F:
+                            for l in L:
+                                if (solution.get_value(g_e[j, k, r, l, s]) == 1):
+                                    fuel_costs_2 += (v[l]/60) ** 2 * c[j, k] * beta * (c_e) * gamma_e * s
+                                    speed_energy += (v[l]/60) ** 2 * c[j, k] * beta * gamma_e * s
+                                if (solution.get_value(g_c[j, k, r, l, s]) == 1):
+                                    fuel_costs_2 += (v[l]/60) ** 2 * c[j, k] * beta * (c_c + e) * gamma_c * s
+                                    speed_energy += (v[l]/60) ** 2 * c[j, k] * beta * gamma_c * s
+            truck_costs = 0
+            if solution.get_value(t_e[r]) == 1:
+                truck_costs += o_e
+            if solution.get_value(t_c[r]) == 1:
+                truck_costs += o_c
+            costs_visit = 0
+            for s in F:
+                if solution.get_value(u[r, s]) == 1:
+                    costs_visit += omega * s
+            print('     Fuel/Electricity costs (speed) [€]: ' + str(round(fuel_costs_2, 2)))
+            print('     Fuel/Electricity costs (total) [€]: ' + str(round(fuel_costs + fuel_costs_2, 2)))
+            print('     Fuel/Electricity costs (total per km) [€/km]: ' + str(round((fuel_costs + fuel_costs_2) / distance, 2)))
+            print('     Truck costs [€]: ' + str(round(truck_costs, 2)))
+            print('     Visits costs [€]: ' + str(round(costs_visit, 2)))
+            print('     Total costs [€]: ' + str(round(fuel_costs + fuel_costs_2 + costs_visit + truck_costs, 2)))
+            print(' Energy consumption: ')
+            print('     Weight related [kWh]: ' + str(round((weight_energy * 10 **(-6) * 0.278),2)))
+            print('     Speed related [kWh]: ' + str(round((speed_energy * 10 ** (-6) * 0.278), 2)))
+            print('     Total [kWh]: ' + str(round(((weight_energy + speed_energy) * 10 ** (-6) * 0.278), 2)))
+            print('     Energy consumption [kWh/km]: ' + str(round((((weight_energy + speed_energy) * 10 ** (-6) * 0.278) / distance),2)))
+    obj_total_cost += round(fuel_costs + fuel_costs_2 + costs_visit + truck_costs, 2)
 
