@@ -350,10 +350,12 @@ payoff["pollution"] = solution.get_objective_value()
 
 print('Each iteration will keep values lower than some values between min and max')
 
-l = 10  # important for step
-r = payoff["pollution"][1] - payoff["transport"][0]
-step = r / l
-steps = list(np.arange(payoff["transport"][0], payoff["pollution"][1], step)) + [payoff["pollution"][1]]
+ec_l = 4  # intervals
+ec_g = ec_l + 1  # grid points
+ec_r = payoff["pollution"][1] - payoff["transport"][0]  # range
+ec_step = ec_r / ec_l
+ec_steps = list(np.arange(payoff["transport"][0], payoff["pollution"][1], ec_step)) + [payoff["pollution"][1]]
+del(ec_steps[0])
 
 # obj_values = []
 # mdl.e = 0
@@ -367,14 +369,17 @@ steps = list(np.arange(payoff["transport"][0], payoff["pollution"][1], step)) + 
 #     obj_values.append(solution.get_objective_value())
 
 obj_values = []
-e_c_delta = 0.00001
-e_c_s = mdl.continuous_var(name="e_c_s")
-for s in steps:
-    mdl.minimize_static_lex([obj_pol_fuel - e_c_delta * e_c_s, obj_tr_vis])
-    mdl.add_constraint(obj_tr_vis - e_c_s == s, ctname='e_c_constr')
+ec_delta = 0.00001  # TODO: set delta?
+# ec_s = mdl.continuous_var_dict(ec_steps, name="ec_s")
+ec_s = mdl.continuous_var(name="ec_s")  # we have only one ec_s because we have only one additional objective function to be used as a constraint (obj_pol_fuel)
+ec_lb = payoff["transport"][0]  # TODO: set lower bounds?
+for i in range(2, ec_l + 1):
+    mdl.maximize_static_lex([obj_pol_fuel - ec_delta * ec_s / ec_r, obj_tr_vis])  # TODO: maximize to minimize together with changing the dir signs (substraction to summation)?
+    ec_e = ec_lb + (i * ec_r) / ec_g  # TODO: same as above
+    mdl.add_constraint(obj_tr_vis - ec_s == ec_e, ctname='ec_constr')
     solution = mdl.solve(log_output=True)
     obj_values.append(solution.get_objective_value())  # append also solution but for now just objective values to compare
-    mdl.remove_constraint('e_c_constr')
+    mdl.remove_constraint('ec_constr')
 
 # VISUALIZE THE RESULTS
 
