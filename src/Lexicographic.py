@@ -569,7 +569,7 @@ ec_delta = 0.000001
 ec_s = mdl.continuous_var(name="ec_s")  # we have only one ec_s because we have only one additional objective function to be used as a constraint (obj_pol_fuel)
 for e in ec_steps:
     mdl.minimize_static_lex([obj_pol_fuel - ec_delta * (ec_s / ec_r), obj_tr_vis])
-    # mdl.minimize(obj_pol_fuel - ec_delta * (ec_s / ec_r))
+    # mdl.minimize(obj_pol_fuel - ec_delta * (ec_s / ec_r)) # TODO: change save_results() so that normal minimization can be used (calculation of second objective value)
     mdl.add_constraint(obj_tr_vis + ec_s == e, ctname='ec_constr')
     solution = mdl.solve(log_output=True)
     save_results()
