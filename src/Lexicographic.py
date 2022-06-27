@@ -443,18 +443,17 @@ mdl.add_constraints(1 + mdl.sum(g_e[j, k, r, l, s] for l in L) >= delta[j, k, r,
 mdl.add_constraints(1 + mdl.sum(g_c[j, k, r, l, s] for l in L) >= delta[j, k, r, s] + t_c[r] for j, k in A for r in R for s in F)
 
 # ICE range constraint
-mdl.add_constraints(mdl.sum(gamma_c * s *(alpha * c[j, k] * (f_c[j, k, r, s] + m_c * delta_c[j, k, r, s]) + beta * c[j, k] * mdl.sum(((v[l]/60) ** 2) * g_c[j, k, r, l, s] for l in L)) for j, k in A for r in R for s in F) <= C_c for r in R for s in F)
+mdl.add_constraints(mdl.sum(gamma_c * s * (alpha * c[j, k] * (f_c[j, k, r, s] + m_c * delta_c[j, k, r, s]) + beta * c[j, k] * mdl.sum(((v[l] / 60) ** 2) * g_c[j, k, r, l, s] for l in L)) for j, k in A for s in F) <= C_c for r in R)
 
 # electric range constraint
-mdl.add_constraints(mdl.sum(gamma_e * s *(alpha * c[j, k] * (f_e[j, k, r, s] + m_e * delta_e[j, k, r, s]) + beta * c[j, k] * mdl.sum(((v[l]/60) ** 2) * g_e[j, k, r, l, s] for l in L)) for j, k in A for r in R for s in F) <= C_e + (240 - mdl.sum((c[j, k] / v[l]) * g_e[j, k, r, l, s] * s for j, k in A for l in L) - mdl.sum(U[j]*nu[j, s]*s*sigma_e[j, r, s] for j in N)) * pi for r in R for s in F)
+mdl.add_constraints(mdl.sum(gamma_e * s * (alpha * c[j, k] * (f_e[j, k, r, s] + m_e * delta_e[j, k, r, s]) + beta * c[j, k] * mdl.sum(((v[l] / 60) ** 2) * g_e[j, k, r, l, s] for l in L)) for j, k in A for s in F) <= C_e + (240 - mdl.sum((c[j, k] / v[l]) * g_e[j, k, r, l, s] * s for j, k in A for l in L for s in F) - mdl.sum(U[j] * nu[j, s] * s * sigma_e[j, r, s] for j in N for s in F)) * pi for r in R)
 
 # time constraint for electric trucks
-mdl.add_constraints(mdl.sum((c[j, k]/v[l]) * g_e[j, k, r, l, s]*s for j, k in A for l in L) + mdl.sum(U[j]*nu[j, s]*s*sigma_e[j, r, s] for j in N) <= 240 for r in R for s in F)
+mdl.add_constraints(mdl.sum((c[j, k] / v[l]) * g_e[j, k, r, l, s] * s for j, k in A for l in L for s in F) + mdl.sum(U[j] * nu[j, s] * s * sigma_e[j, r, s] for j in N for s in F) <= 240 for r in R)
 
 
 # time constraint for ICE trucks
-mdl.add_constraints(mdl.sum((c[j, k]/v[l]) * g_c[j, k, r, l, s]*s for j, k in A for l in L) + mdl.sum(U[j]*nu[j, s]*s*sigma_c[j, r, s] for j in N) <= 240 for r in R for s in F)
-
+mdl.add_constraints(mdl.sum((c[j, k] / v[l]) * g_c[j, k, r, l, s] * s for j, k in A for l in L for s in F) + mdl.sum(U[j] * nu[j, s] * s * sigma_c[j, r, s] for j in N for s in F) <= 240 for r in R)
 
 # delta_e constraint 1
 mdl.add_constraints(2 * delta_e[j, k, r, s] <= delta[j, k, r, s] + t_e[r] for j, k in A for r in R for s in F)
@@ -529,12 +528,11 @@ payoff["pollution"] = solution.get_objective_value()
 
 print('Each iteration will keep values lower than some values between min and max')
 
-ec_l = 8  # intervals
+ec_l = 12  # intervals
 ec_g = ec_l + 1  # grid points
 ec_r = payoff["pollution"][1] - payoff["transport"][0]  # range
 ec_step = ec_r / ec_l
 ec_steps = list(np.arange(payoff["transport"][0], payoff["pollution"][1], ec_step)) + [payoff["pollution"][1]]
-# del(ec_steps[0])    # TODO: why deleting this first point? -> after testing: not necesarry
 
 # obj_values = []
 # mdl.e = 0
@@ -567,10 +565,11 @@ ec_steps = list(np.arange(payoff["transport"][0], payoff["pollution"][1], ec_ste
 
 obj_values = []
 infeasibility_count = 0
-ec_delta = 0.000001  # TODO: set delta?
+ec_delta = 0.000001
 ec_s = mdl.continuous_var(name="ec_s")  # we have only one ec_s because we have only one additional objective function to be used as a constraint (obj_pol_fuel)
 for e in ec_steps:
     mdl.minimize_static_lex([obj_pol_fuel - ec_delta * (ec_s / ec_r), obj_tr_vis])
+    # mdl.minimize(obj_pol_fuel - ec_delta * (ec_s / ec_r))
     mdl.add_constraint(obj_tr_vis + ec_s == e, ctname='ec_constr')
     solution = mdl.solve(log_output=True)
     save_results()
