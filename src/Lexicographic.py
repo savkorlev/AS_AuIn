@@ -18,20 +18,13 @@ def save_results():
 
     for r in R:
         if solution.get_value(x[r]) == 1:
-            # print('\nRoute ' + str(r))
             sup = []
             for j in N:
                 if solution.get_value(y[j, r]) == 1:
                     sup.append(j)
-            # print(' Suppliers:' + str(sup))
             for s in F:
                 if solution.get_value(u[r, s]) == 1:
                     freq = s
-            # print(' Frequency: ' + str(freq))
-            # if solution.get_value(t_e[r]) == 1:
-            # print(' Vehicle type: electric')
-            # if solution.get_value(t_c[r]) == 1:
-            # print(' Vehicle type: conventional')
             distance = 0
             for j in V:
                 for k in V:
@@ -39,7 +32,6 @@ def save_results():
                         if k != j:
                             if (solution.get_value(delta[j, k, r, s]) == 1):
                                 distance += (c[j, k] * s) / 1000
-            # print(' Driven distance in total [km]: ' + str(round(distance, 2)))
             time_driving = 0
             time_unloading = 0
             for s in F:
@@ -56,11 +48,6 @@ def save_results():
                         time_unloading += U[j] * nu[j, s] * s
                     if (solution.get_value(sigma_c[j, r, s]) == 1):
                         time_unloading += U[j] * nu[j, s] * s
-            # print(' Needed time:')
-            # print('     In total (all trips) [min]: ' + str(round(time_driving + time_unloading)))
-            # print('     Driving (all trips) [min]: ' + str(round(time_driving)))
-            # print('     Loading (all trips) [min]: ' + str(round(time_unloading)))
-            # print(' Costs:')
             fuel_costs = 0
             weight_energy = 0
             for j in V:
@@ -81,7 +68,6 @@ def save_results():
                             if (solution.get_value(delta_c[j, k, r, s]) == 1):
                                 fuel_costs += m_c * s * (c_c + e) * c[j, k] * alpha * gamma_c
                                 weight_energy += m_c * s * c[j, k] * alpha * gamma_c
-            # print('     Fuel/Electricity costs (weight) [€]: ' + str(round(fuel_costs, 2)))
             fuel_costs_2 = 0
             speed_energy = 0
             count = 0
@@ -105,17 +91,6 @@ def save_results():
             for s in F:
                 if solution.get_value(u[r, s]) == 1:
                     costs_visit += omega * s
-            # print('     Fuel/Electricity costs (speed) [€]: ' + str(round(fuel_costs_2, 2)))
-            # print('     Fuel/Electricity costs (total) [€]: ' + str(round(fuel_costs + fuel_costs_2, 2)))
-            # print('     Fuel/Electricity costs (total per km) [€/km]: ' + str(round((fuel_costs + fuel_costs_2) / distance, 2)))
-            # print('     Truck costs [€]: ' + str(round(truck_costs, 2)))
-            # print('     Visits costs [€]: ' + str(round(costs_visit, 2)))
-            # print('     Total costs [€]: ' + str(round(fuel_costs + fuel_costs_2 + costs_visit + truck_costs, 2)))
-            # print(' Energy consumption: ')
-            # print('     Weight related [kWh]: ' + str(round((weight_energy * 10 **(-6) * 0.278),2)))
-            # print('     Speed related [kWh]: ' + str(round((speed_energy * 10 ** (-6) * 0.278), 2)))
-            # print('     Total [kWh]: ' + str(round(((weight_energy + speed_energy) * 10 ** (-6) * 0.278), 2)))
-            # print('     Energy consumption [kWh/km]: ' + str(round((((weight_energy + speed_energy) * 10 ** (-6) * 0.278) / distance),2)))
 
             energy_total += ((weight_energy + speed_energy) * 10 ** (-6) * 0.278)
             fuel_costs_total += (fuel_costs + fuel_costs_2)
@@ -124,11 +99,6 @@ def save_results():
             if solution.get_value(t_c[r]) == 1:
                 co2_amount += (energy_total * co2)
 
-    # PRINT SOLVING TIME
-
-    # print('Solving time: ' + str(round(mdl.solve_details.time, 3)) + ' seconds')
-
-    # SAVE SOLUTIONS TO A DATAFRAME
 
     obj_val = solution.get_objective_value()
     solv_time = round(mdl.solve_details.time, 3)
@@ -177,16 +147,33 @@ def save_results():
                     unique_speed.append(level)
             speed_levels[r] = unique_speed
 
+    obj_val_truck_visits = calculate_truck_visit_cost()
+
     results_list.append(
-        [num_supp, peri, C_e, obj_val, num_routes, suppliers, frequencies, first_supplier, trucks,
+        [num_supp, peri, C_e, [obj_val, obj_val_truck_visits], num_routes, suppliers, frequencies, first_supplier, trucks,
          speed_levels, round(energy_total, 2), round(fuel_costs_total, 2), round(distance_total, 2),
          round(time_total, 2), round(co2_amount, 2), solv_time])
+
+
+
+def calculate_truck_visit_cost():
+    visit_cost = 0
+    truck_cost = 0
+    for r in R:
+        if solution.get_value(t_e[r]) == 1:
+            truck_cost += o_e
+        if solution.get_value(t_c[r]) == 1:
+            truck_cost += o_c
+        for s in F:
+            if solution.get_value(u[r, s]) == 1:
+                visit_cost += omega * s
+    return (visit_cost + truck_cost)
 
 
 peri = 20000    # perimeter, in which the suppliers are arranged around the manufacturer (in meters!)
 
 random.seed(0)
-num_supp = 5
+num_supp = 6
 supp_list = [[peri/2, peri/2, 0]]   # manufacturer is in the middle
 for i in range(1,num_supp+1):
     x = int(random.uniform(0, peri))
@@ -195,9 +182,7 @@ for i in range(1,num_supp+1):
     supp_list.append([x, y, t])
 df_nodes = pd.DataFrame(supp_list, columns = ['x', 'y', 'Unloading Times[min]'])
 
-#df_nodes = pd.read_csv("data/nodes.txt")
 df_routes = pd.read_csv("data/routes.txt")
-#df_nodes = df_nodes.iloc[:8]
 df_routes = df_routes.iloc[:(num_supp*4 + 1)]
 
 
@@ -215,15 +200,6 @@ for L in range(2, len(N)+1):
 loc_x = df_nodes["x"].to_list()
 loc_y = df_nodes["y"].to_list()
 
-# PLOT DIAGRAM OF NODES
-# plt.scatter(loc_x[1:], loc_y[1:], c='b')
-# for i in range(len(loc_x[1:])):
-#     plt.text(loc_x[i+1], loc_y[i+1]+1000, str(i+1))
-# plt.plot(loc_x[0], loc_y[0], c='r', marker='s')
-# plt.text(loc_x[0], loc_y[0]+1000,'0')
-#
-# plt.axis('equal')
-# plt.show()
 
 A = [(i, j) for i in V for j in V if i != j]  # (0,1), (0,2) and so on - set of arcs
 c = {(i, j): np.hypot(loc_x[i]-loc_x[j], loc_y[i]-loc_y[j]) for i, j in A}  # set of costs between arcs - distances
@@ -251,7 +227,6 @@ for j in N:
 
 
 d = {p: int(random.uniform(6, 24)) * 60 for p in P}  # the due date of P-LANE p (in minutes)
-# TODO: make it actual times and part of dataset and not randomly generated. Issue - we don't have a dataset for P-LANEs
 
 phi = 5  # transportation cost per unit distance
 omega = 40  # fixed cost per vehicle per visit
@@ -267,8 +242,6 @@ nu = {}  # the average number of boxes collected from supplier j per each visit 
 for j in range(1, len(b_j) + 1):
     for s in F:
         nu[(j, s)] = b_j[j]/s
-
-############################ Extensions #############################################
 
 L = [1, 2, 3]  # set of average speed levels (indices)
 
@@ -470,34 +443,15 @@ mdl.add_constraints(1 + delta_c[j, k, r, s] >= delta[j, k, r, s] + t_c[r] for j,
 # additional flow constraint 1
 mdl.add_constraints(mdl.sum(z[0, k, r] for k in N) == x[r] for r in R)
 
-# limit number of trucks of specific type
-# mdl.add_constraints(mdl.sum(t_e[r] for r in R) <= 0 for r in R)   # no electric truck can be used
-
-# force multiple routes
-# mdl.add_constraint(mdl.sum(x[r] for r in R) == 2)
-
-# force an arc to be used
-# mdl.add_constraint(mdl.sum(z[3, 2, r] for r in R) == 1)
 
 ########################################################################################################
 
 # SOLVE AND PRINT (+ EPSILON CONSTRAINT)
 mdl.parameters.mip.tolerances.integrality = 0   # forces the binary variables to be excatly 1 or 0 not like 0.999999 or 0.00000003, might lead to a false infeasibility -> increase value slightly then (default = 1e-05); necesarry for Big M formulation of load constraints
-# solution = mdl.solve(log_output=True)
+
 
 ################################### Extension objective function ##################################################
 
-# mdl.minimize(
-#              mdl.sum(omega * s * u[r, s] for r in R for s in F) +
-#              mdl.sum(((f_e[j, k, r, s] + m_e * delta_e[j, k, r, s]) * c[j, k]) * alpha * c_e * gamma_e * s for j, k in A for r in R for s in F) +
-#              mdl.sum(((f_c[j, k, r, s] + m_c * delta_c[j, k, r, s]) * c[j, k]) * alpha * (c_c + e) * gamma_c * s for j, k in A for r in R for s in F) +
-#              mdl.sum((mdl.sum((v[l]/60) ** 2 * g_e[j, k, r, l, s] for l in L) * c[j, k] * beta) * c_e * gamma_e * s for j, k in A for r in R for s in F) +
-#              mdl.sum((mdl.sum((v[l]/60) ** 2 * g_c[j, k, r, l, s] for l in L) * c[j, k] * beta) * (c_c + e) * gamma_c * s for j, k in A for r in R for s in F) +
-#              mdl.sum(t_e[r] for r in R) * o_e +
-#              mdl.sum(t_c[r] for r in R) * o_c)
-# # Total costs: 325
-# # Total [kWh]: 368
-# # solution.get_objective_value() = 610.7
 
 # truck costs + visits
 obj_tr_vis = mdl.sum(omega * s * u[r, s] for r in R for s in F) + \
@@ -526,91 +480,41 @@ mdl.minimize_static_lex([obj_pol_fuel, obj_tr_vis])
 solution = mdl.solve(log_output=True)
 payoff["pollution"] = solution.get_objective_value()
 
-print('Each iteration will keep values lower than some values between min and max')
 
-ec_l = 12  # intervals
+ec_l = 14  # intervals
 ec_g = ec_l + 1  # grid points
 ec_r = payoff["pollution"][1] - payoff["transport"][0]  # range
 ec_step = ec_r / ec_l
 ec_steps = list(np.arange(payoff["transport"][0], payoff["pollution"][1], ec_step)) + [payoff["pollution"][1]]
 
-# obj_values = []
-# mdl.e = 0
-# mdl.delta = 0.0001
-# mdl.s = mdl.continuous_var(name="mdl_s")
-# mdl.minimize_static_lex([obj_pol_fuel - mdl.delta * mdl.s, obj_tr_vis])
-# mdl.add_constraint(obj_tr_vis - mdl.s == mdl.e)
-# for s in steps:
-#     mdl.e = s
-#     solution = mdl.solve(log_output=True)
-#     obj_values.append(solution.get_objective_value())
 
-# obj_values = []
-# ec_delta = 0.00001  # TODO: set delta?
-# infeasibility_count = 0
-# # ec_s = mdl.continuous_var_dict(ec_steps, name="ec_s")
-# ec_s = mdl.continuous_var(name="ec_s")  # we have only one ec_s because we have only one additional objective function to be used as a constraint (obj_pol_fuel)
-# ec_lb = payoff["transport"][0]  # TODO: set lower bounds?
-# for i in range(2, ec_l + 1):
-#     mdl.maximize_static_lex([obj_pol_fuel - ec_delta * ec_s / ec_r, obj_tr_vis])  # TODO: maximize to minimize together with changing the dir signs (substraction to summation)?
-#     ec_e = ec_lb + (i * ec_r) / ec_g  # TODO: same as above
-#     mdl.add_constraint(obj_tr_vis - ec_s == ec_e, ctname='ec_constr')
-#     solution = mdl.solve(log_output=True)
-#     if solution == None:
-#         infeasibility_count += 1
-#     obj_values.append(solution.get_objective_value())  # append also solution but for now just objective values to compare
-#     mdl.remove_constraint('ec_constr')
-
-# LUKAS APPROACH
 
 obj_values = []
 infeasibility_count = 0
 ec_delta = 0.000001
 ec_s = mdl.continuous_var(name="ec_s")  # we have only one ec_s because we have only one additional objective function to be used as a constraint (obj_pol_fuel)
 for e in ec_steps:
-    mdl.minimize_static_lex([obj_pol_fuel - ec_delta * (ec_s / ec_r), obj_tr_vis])
-    # mdl.minimize(obj_pol_fuel - ec_delta * (ec_s / ec_r)) # TODO: change save_results() so that normal minimization can be used (calculation of second objective value)
+    # mdl.minimize_static_lex([obj_pol_fuel - ec_delta * (ec_s / ec_r), obj_tr_vis])
+    mdl.minimize(obj_pol_fuel - ec_delta * (ec_s / ec_r))
     mdl.add_constraint(obj_tr_vis + ec_s == e, ctname='ec_constr')
-    solution = mdl.solve(log_output=True)
+    solution = mdl.solve(log_output=False)
     save_results()
     obj_values.append(solution.get_objective_value())  # append also solution but for now just objective values to compare
     mdl.remove_constraint('ec_constr')
-    print('\n\nGrid point ' + str(e) + ' explored')
-
-fuel_values = []
-tr_vis_values = []
-for i in range(len(obj_values)):
-    fuel_values.append(obj_values[i][0])
-    tr_vis_values.append(obj_values[i][1])
-
-plt.plot(fuel_values, tr_vis_values, 'ro--', label = 'Pareto front')
-plt.ylabel('Truck_visits')
-plt.xlabel('Pollution')
-plt.show()
-
 
 df_results = pd.DataFrame(results_list, columns = ['Number of suppliers', 'Perimeter [m]', 'Battery Capacity [MJ]', 'Object Value (Fuel/Electricity ; Truck+Visits) [€]', 'Number of routes', 'Supplier-route assignment', 'Frequencies', 'First supplier in route', 'Used trucks', 'Speed levels', 'Total energy demand [kWh]', 'Total energy costs [€]', 'Total driven distance [km]', 'Total time [min]', 'Total CO2 amount [kg]', 'Solving time [sec]'])
 
-df_results.to_csv(r'C:\Users\Lukas Wittmann\Desktop\test_output.csv')
+list_pol =  []
+for i in range(len(df_results)):
+    list_pol.append(df_results['Object Value (Fuel/Electricity ; Truck+Visits) [€]'][i][0])
+
+list_tr_vis =  []
+for i in range(len(df_results)):
+    list_tr_vis.append(df_results['Object Value (Fuel/Electricity ; Truck+Visits) [€]'][i][1])
 
 
-# VISUALIZE THE RESULTS
+plt.plot(list_pol, list_tr_vis, 'o--', label = 'Pareto front', color = 'b')
+plt.ylabel('Objective Value Fixed visit + Truck cost [€]')
+plt.xlabel('Objective Value Pollution + Fuel/Electricity cost [€]')
+plt.show()
 
-# plt.scatter(loc_x[1:], loc_y[1:], c='b')
-# for i in range(len(loc_x[1:])):
-#     plt.text(loc_x[i+1], loc_y[i+1]+1000, str(i+1))
-# plt.plot(loc_x[0], loc_y[0], c='r', marker='s')
-# plt.text(loc_x[0], loc_y[0]+1000,'0')
-# plt.axis('equal')
-#
-#
-# for j in V:
-#     for k in V:
-#         for r in R:
-#             if k != j:
-#                 if solution.get_value(z[j, k, r]) > 0.5:
-#                     plt.plot([loc_x[j], loc_x[k]], [loc_y[j], loc_y[k]], linestyle='solid',color='black')
-#
-# plt.show()
-
-# PRINT OUT A SUMMARY OF THE RESULTS
