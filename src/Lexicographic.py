@@ -173,7 +173,7 @@ def calculate_truck_visit_cost():
 peri = 20000    # perimeter, in which the suppliers are arranged around the manufacturer (in meters!)
 
 random.seed(0)
-num_supp = 6
+num_supp = 5
 supp_list = [[peri/2, peri/2, 0]]   # manufacturer is in the middle
 for i in range(1,num_supp+1):
     x = int(random.uniform(0, peri))
@@ -296,7 +296,6 @@ F         set of visiting frequencies
 nu        the average number of boxes collected from supplier j per each visit if supplier j is visited s times
 '''
 # Note that we can't use just b because there are b_jp and b_j (same later on for A, F)
-# TODO: possible issue - p, j, s, etc. are already formally defined above in for loops
 
 mdl = Model('CVRP')
 
