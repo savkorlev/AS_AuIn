@@ -516,4 +516,3 @@ plt.plot(list_pol, list_tr_vis, 'o--', label = 'Pareto front', color = 'b')
 plt.ylabel('Objective Value Fixed visit + Truck cost [€]')
 plt.xlabel('Objective Value Pollution + Fuel/Electricity cost [€]')
 plt.show()
-
